@@ -1,0 +1,6 @@
+{
+  "name": "মেস হিসাব – Mess Meal Manager",
+  "description": "রিয়েলটাইম মেস মিল ও হিসাব ব্যবস্থাপনা - Google লগইন, মিল চার্ট, বাজার খরচ ও জমা সহ।",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

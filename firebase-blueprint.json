@@ -1,0 +1,51 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile containing identity information and joined mess IDs",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string", "description": "User display name" },
+        "email": { "type": "string", "description": "User email address" },
+        "photoURL": { "type": "string", "description": "Profile picture URL" },
+        "currentMessId": { "type": "string", "description": "Active mess ID selected by user" },
+        "joinedMesses": { "type": "array", "description": "List of mess IDs user belongs to" }
+      },
+      "required": ["uid", "name", "email"]
+    },
+    "MessData": {
+      "title": "MessData",
+      "description": "Real-time mess accounting data document containing all members, meals, deposits, costs and settings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Mess document ID" },
+        "name": { "type": "string", "description": "Mess name" },
+        "mgrUid": { "type": "string", "description": "Auth UID of the mess manager" },
+        "mgrEmail": { "type": "string", "description": "Email address of manager" },
+        "mgrId": { "type": "string", "description": "Member ID corresponding to manager" },
+        "members": { "type": "array", "description": "List of member objects in the mess" },
+        "deposits": { "type": "array", "description": "List of deposits made by members" },
+        "bazar": { "type": "array", "description": "List of grocery bazar purchases" },
+        "meals": { "type": "object", "description": "Map of date keys to member meal allocations" },
+        "reqs": { "type": "array", "description": "Meal change requests from members" },
+        "notices": { "type": "array", "description": "Notices board messages" },
+        "other": { "type": "array", "description": "Shared and individual utility costs" },
+        "cutoff": { "type": "number", "description": "Meal request cutoff hour in 24h format" },
+        "closed": { "type": "object", "description": "Archived status by month key" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["id", "name", "mgrEmail", "members"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores user profile and registered mess references"
+    },
+    "/messes/{messId}": {
+      "schema": { "$ref": "#/entities/MessData" },
+      "description": "Stores complete real-time state for a mess accessible by its members"
+    }
+  }
+}
