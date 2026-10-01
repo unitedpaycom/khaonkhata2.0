@@ -46,6 +46,7 @@ import { Icon, GoogleIcon, FacebookIcon } from './components/Icons';
 import { Modal, ModalField } from './components/Modal';
 import { Toast } from './components/Toast';
 import { AddMemberModal } from './components/AddMemberModal';
+import { PWAInstallButton } from './components/PWAInstallButton';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -1079,6 +1080,7 @@ export default function App() {
         </button>
 
         <div className="mt-auto pt-4 border-t border-[var(--line)] space-y-1.5">
+          <PWAInstallButton />
           <button
             className={tab === 'settings' ? 'on' : ''}
             onClick={() => { setTab('settings'); setDrawerOpen(false); }}
@@ -2925,6 +2927,7 @@ export default function App() {
           </button>
 
           <div className="px-5 pt-6 space-y-2.5">
+            <PWAInstallButton />
             <a
               href="https://www.facebook.com/share/1VCSom58hc/"
               target="_blank"
