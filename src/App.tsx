@@ -63,7 +63,9 @@ export default function App() {
     return localStorage.getItem('mm_cur_mess_id') || '';
   });
   const [messState, setMessState] = useState<MessState | null>(null);
-  const [messLoading, setMessLoading] = useState(false);
+  const [messLoading, setMessLoading] = useState<boolean>(() => {
+    return !!localStorage.getItem('mm_cur_mess_id');
+  });
   const [userMesses, setUserMesses] = useState<{ id: string; name: string; mgrEmail: string }[]>([]);
 
   // Navigation & View
@@ -133,7 +135,6 @@ export default function App() {
   useEffect(() => {
     const unsub = auth.onAuthStateChanged(async (currentUser) => {
       setUser(currentUser);
-      setAuthLoading(false);
       if (currentUser) {
         // Fetch or create user profile
         try {
@@ -166,10 +167,14 @@ export default function App() {
           });
         } catch (err) {
           handleFirestoreError(err, OperationType.GET, 'users/' + currentUser.uid);
+        } finally {
+          setAuthLoading(false);
         }
       } else {
         setProfile(null);
         setMessState(null);
+        setMessLoading(false);
+        setAuthLoading(false);
       }
     });
 
@@ -831,13 +836,37 @@ export default function App() {
     return Array.from({ length: dim }, (_, i) => `${activeYM}-${pad(i + 1)}`);
   }, [activeYear, activeMonthNum, activeYM]);
 
-  // Loading Screen
-  if (authLoading) {
+  // Full-Screen Loading Animation:
+  // Shows while verifying session (authLoading) OR while loading the active mess data for logged-in user
+  const isCheckingSessionOrMess = authLoading || (!!user && !!currentMessId && !messState);
+
+  if (isCheckingSessionOrMess) {
     return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 rounded-full border-4 border-[var(--pri)] border-t-transparent animate-spin mx-auto"></div>
-          <p className="font-semibold text-lg">KhaonKhata লোড হচ্ছে...</p>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)] p-4 select-none">
+        <div className="text-center space-y-6 max-w-sm w-full mx-auto">
+          {/* Logo & Brand Icon with dual ring spinner */}
+          <div className="relative w-20 h-20 mx-auto">
+            <div className="w-20 h-20 rounded-full border-4 border-emerald-500/15 border-t-emerald-600 animate-spin"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 shadow-sm">
+                <Icon name="bowl" size={26} />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="font-serif text-2xl font-bold tracking-tight text-[var(--fg)]">
+              KhaonKhata
+            </h1>
+            <p className="text-sm font-medium text-[var(--mut)] flex items-center justify-center gap-1.5">
+              <span>সেশন ও মেস যাচাই করা হচ্ছে</span>
+              <span className="inline-flex gap-1 items-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce" style={{ animationDelay: '300ms' }}></span>
+              </span>
+            </p>
+          </div>
         </div>
       </div>
     );

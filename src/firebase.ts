@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
+import { doc, getDocFromServer, initializeFirestore } from 'firebase/firestore';
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBj025jce7qLDKGzwWecaOHkFBWe5s7tPc",
@@ -15,7 +15,9 @@ export const firebaseConfig = {
 export const FCM_VAPID_KEY = "BP9NZfMqI6oPQNZ-997jwJMFVHtyqxPaFRd83VyYjTnHDmlP1FWd4fEWmAcskTqFwqZIjwdet7GY5cn_PijF3Hk";
 
 export const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: true,
+});
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
