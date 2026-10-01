@@ -1,10 +1,19 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+
+export const firebaseConfig = {
+  apiKey: "AIzaSyBj025jce7qLDKGzwWecaOHkFBWe5s7tPc",
+  authDomain: "khaonkhata.firebaseapp.com",
+  projectId: "khaonkhata",
+  storageBucket: "khaonkhata.firebasestorage.app",
+  messagingSenderId: "433133662711",
+  appId: "1:433133662711:web:7d78eb1b63db1edf81bef2",
+  measurementId: "G-BLVPSX0852"
+};
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 

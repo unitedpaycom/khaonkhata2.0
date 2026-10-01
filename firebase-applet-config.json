@@ -1,12 +1,9 @@
 {
-  "projectId": "aesthetic-operative-l6d0h",
-  "appId": "1:493491268346:web:4102ecf7835291458df743",
-  "apiKey": "AIzaSyDT6C6VYYdSmrq5-AnTkC1MEZ1O38FfWIM",
-  "authDomain": "aesthetic-operative-l6d0h.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-mealsyncrealtime-126ab1d8-28f4-4af9-9f4b-dbcce2f23c6b",
-  "storageBucket": "aesthetic-operative-l6d0h.firebasestorage.app",
-  "messagingSenderId": "493491268346",
-  "measurementId": "",
-  "oAuthClientId": "493491268346-qa9rhj9suft4vra24gi8pgechcp8nuoc.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "khaonkhata",
+  "appId": "1:433133662711:web:7d78eb1b63db1edf81bef2",
+  "apiKey": "AIzaSyBj025jce7qLDKGzwWecaOHkFBWe5s7tPc",
+  "authDomain": "khaonkhata.firebaseapp.com",
+  "storageBucket": "khaonkhata.firebasestorage.app",
+  "messagingSenderId": "433133662711",
+  "measurementId": "G-BLVPSX0852"
 }
