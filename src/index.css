@@ -105,7 +105,8 @@ nav.desktop-nav {
   box-shadow: 0 4px 12px rgba(14,143,99,.3);
 }
 
-nav.desktop-nav button {
+nav.desktop-nav button,
+nav.desktop-nav a.nav-item {
   all: unset;
   cursor: pointer;
   padding: 10px 14px;
@@ -118,19 +119,22 @@ nav.desktop-nav button {
   transition: all .2s cubic-bezier(.2,.8,.2,1);
 }
 
-nav.desktop-nav button:hover:not(.on) {
+nav.desktop-nav button:hover:not(.on),
+nav.desktop-nav a.nav-item:hover:not(.on) {
   background: rgba(14,143,99,.06);
   color: var(--ink);
   transform: translateX(2px);
 }
 
-nav.desktop-nav button.on {
+nav.desktop-nav button.on,
+nav.desktop-nav a.nav-item.on {
   background: #E3F5EC;
   color: var(--pri2);
   font-weight: 600;
 }
 
-[data-theme="dark"] nav.desktop-nav button.on {
+[data-theme="dark"] nav.desktop-nav button.on,
+[data-theme="dark"] nav.desktop-nav a.nav-item.on {
   background: rgba(25, 178, 124, 0.18);
   color: var(--pri);
 }
@@ -840,9 +844,11 @@ input:focus, select:focus, textarea:focus {
   background: linear-gradient(135deg, #163629, #1a2c3a);
 }
 
-.drawer button {
+.drawer button,
+.drawer a.nav-item {
   all: unset;
   display: flex;
+  align-items: center;
   gap: 14px;
   padding: 13px 20px;
   cursor: pointer;
@@ -852,7 +858,8 @@ input:focus, select:focus, textarea:focus {
   transition: background-color .15s;
 }
 
-.drawer button.on {
+.drawer button.on,
+.drawer a.nav-item.on {
   background: var(--line);
   border-radius: 0 99px 99px 0;
   width: calc(100% - 14px);

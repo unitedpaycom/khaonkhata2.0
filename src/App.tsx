@@ -52,6 +52,7 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { ManagerPaymentMethods } from './components/ManagerPaymentMethods';
 import { MemberDeposit } from './components/MemberDeposit';
 import { NotificationModal } from './components/NotificationModal';
+import { AboutPage } from './components/AboutPage';
 import { triggerMessNotification } from './utils/notificationHelpers';
 import {
   MessNotification,
@@ -81,12 +82,38 @@ export default function App() {
   const [userMesses, setUserMesses] = useState<{ id: string; name: string; mgrEmail: string }[]>([]);
 
   // Navigation & View
-  const [tab, setTab] = useState<'home' | 'deposit' | 'meal' | 'cost' | 'members' | 'detail' | 'active' | 'all' | 'settings' | 'profile' | 'payment_methods' | 'member_deposit'>('home');
+  const [tab, setTab] = useState<'home' | 'about' | 'deposit' | 'meal' | 'cost' | 'members' | 'detail' | 'active' | 'all' | 'settings' | 'profile' | 'payment_methods' | 'member_deposit'>(() => {
+    if (typeof window !== 'undefined' && window.location.pathname === '/about') {
+      return 'about';
+    }
+    return 'home';
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeYM, setActiveYM] = useState<string>(TD.slice(0, 7));
   const [detailMemberId, setDetailMemberId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
+
+  // Sync tab with browser URL history
+  useEffect(() => {
+    if (tab === 'about' && window.location.pathname !== '/about') {
+      window.history.pushState({}, '', '/about');
+    } else if (tab !== 'about' && window.location.pathname === '/about') {
+      window.history.pushState({}, '', '/');
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (window.location.pathname === '/about') {
+        setTab('about');
+      } else {
+        setTab('home');
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Meal Tab specifics
   const [mealSubTab, setMealSubTab] = useState<'add' | 'req' | 'chart'>('add');
@@ -1316,6 +1343,23 @@ export default function App() {
     );
   }
 
+  // Public /about route accessible even when not logged in
+  if (tab === 'about' && !user) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <AboutPage
+          standalone
+          onLogin={handleGoogleSignIn}
+          onBack={() => {
+            setTab('home');
+            window.history.pushState({}, '', '/');
+          }}
+        />
+        <Toast message={toastMsg} />
+      </div>
+    );
+  }
+
   // Not signed in: Show Direct Google Login Screen
   if (!user) {
     return (
@@ -1338,10 +1382,24 @@ export default function App() {
             <span>Google দিয়ে চালিয়ে যান</span>
           </button>
 
-          <div className="mt-8 pt-6 border-t border-[var(--line)] text-center text-xs text-[var(--mut)] space-y-1">
+          <div className="mt-8 pt-6 border-t border-[var(--line)] text-center text-xs text-[var(--mut)] space-y-2">
             <p>✓ তাৎক্ষণিক রিয়েলটাইম সিঙ্ক (Firestore)</p>
             <p>✓ প্রতিদিনের মিল চার্ট, বাজার খরচ ও জমা</p>
             <p>✓ স্বয়ংক্রিয় মিল রেট ও ব্যালেন্স হিসাব</p>
+            <div className="pt-2">
+              <a
+                href="/about"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setTab('about');
+                  window.history.pushState({}, '', '/about');
+                }}
+                className="text-[var(--pri)] font-semibold hover:underline inline-flex items-center gap-1.5 cursor-pointer"
+              >
+                <Icon name="user" size={14} />
+                <span>About Us &amp; Founder (আমাদের সম্পর্কে)</span>
+              </a>
+            </div>
           </div>
         </div>
 
@@ -1408,6 +1466,22 @@ export default function App() {
             </div>
           </div>
         )}
+        <Toast message={toastMsg} />
+      </div>
+    );
+  }
+
+  // Public /about route accessible even when no mess selected
+  if (tab === 'about' && (!currentMessId || !messState)) {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <AboutPage
+          standalone
+          onBack={() => {
+            setTab('home');
+            window.history.pushState({}, '', '/');
+          }}
+        />
         <Toast message={toastMsg} />
       </div>
     );
@@ -1610,6 +1684,19 @@ export default function App() {
           <span>Home</span>
         </button>
 
+        <a
+          href="/about"
+          className={`nav-item ${tab === 'about' ? 'on' : ''}`}
+          onClick={(e) => {
+            e.preventDefault();
+            setTab('about');
+            setDrawerOpen(false);
+          }}
+        >
+          <Icon name="user" size={18} />
+          <span>About Us</span>
+        </a>
+
         {isManager && (
           <button
             className={tab === 'deposit' ? 'on' : ''}
@@ -1734,6 +1821,7 @@ export default function App() {
 
           <h1 className="capitalize">
             {tab === 'home' && 'ড্যাশবোর্ড'}
+            {tab === 'about' && 'About Us'}
             {tab === 'deposit' && 'Add Deposit'}
             {tab === 'meal' && 'Add Meal'}
             {tab === 'cost' && 'Add Cost'}
@@ -1810,6 +1898,18 @@ export default function App() {
           </span>
           <span>মেস: <b>{messState.mess}</b> ({isManager ? 'ম্যানেজার' : 'সদস্য'})</span>
         </div>
+
+        {/* --- VIEW: ABOUT US --- */}
+        {tab === 'about' && (
+          <div className="pg">
+            <AboutPage
+              onBack={() => {
+                setTab('home');
+                window.history.pushState({}, '', '/');
+              }}
+            />
+          </div>
+        )}
 
         {/* --- VIEW: HOME (DASHBOARD) --- */}
         {tab === 'home' && (
@@ -3703,6 +3803,19 @@ export default function App() {
             <Icon name="home" size={18} />
             <span>Home</span>
           </button>
+
+          <a
+            href="/about"
+            className={`nav-item ${tab === 'about' ? 'on' : ''}`}
+            onClick={(e) => {
+              e.preventDefault();
+              setTab('about');
+              setDrawerOpen(false);
+            }}
+          >
+            <Icon name="user" size={18} />
+            <span>About Us</span>
+          </a>
 
           {isManager && (
             <button
