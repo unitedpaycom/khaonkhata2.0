@@ -98,6 +98,22 @@ export interface MemberDepositRequest {
   reviewedBy?: string;
 }
 
+export type NotificationType = 'meal' | 'deposit' | 'expense' | 'notice' | 'system';
+
+export interface MessNotification {
+  id: string;
+  messId: string;
+  type: NotificationType;
+  title: string;
+  body: string;
+  createdAt: string; // ISO string
+  actorId?: string;
+  actorName?: string;
+  targetMemberId?: string;
+  amount?: number;
+  metadata?: Record<string, any>;
+}
+
 export interface MessState {
   id: string;
   mess: string;
@@ -114,6 +130,7 @@ export interface MessState {
   paymentMethods?: PaymentMethodsConfig;
   notices: Notice[];
   other: OtherCost[];
+  notifications?: MessNotification[];
   cutoff: number;
   closed: Record<string, boolean>; // YYYY-MM -> boolean
   theme?: 'light' | 'dark' | 'auto';

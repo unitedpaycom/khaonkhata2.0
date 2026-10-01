@@ -52,6 +52,12 @@ import { AddMemberModal } from './components/AddMemberModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { ManagerPaymentMethods } from './components/ManagerPaymentMethods';
 import { MemberDeposit } from './components/MemberDeposit';
+import { NotificationModal } from './components/NotificationModal';
+import { triggerMessNotification } from './utils/notificationHelpers';
+import {
+  MessNotification,
+  NotificationType,
+} from './types';
 import {
   requestFcmPermissionAndGetToken,
   setupFcmForegroundListener,
@@ -126,6 +132,139 @@ export default function App() {
   const [targetedPushLoading, setTargetedPushLoading] = useState(false);
   const [targetedPushResult, setTargetedPushResult] = useState<TargetedMealPushResult | null>(null);
   const [isTargetedReportOpen, setIsTargetedReportOpen] = useState(false);
+
+  // Notification System State
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
+  const [collectionNotifs, setCollectionNotifs] = useState<MessNotification[]>([]);
+  const [readNotificationIds, setReadNotificationIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem(
+        `khaonkhata_read_notifs_${user?.uid || 'guest'}_${currentMessId || 'none'}`
+      );
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  // Keep readNotificationIds in sync when user or currentMessId changes
+  useEffect(() => {
+    if (!currentMessId || !user) return;
+    try {
+      const stored = localStorage.getItem(`khaonkhata_read_notifs_${user.uid}_${currentMessId}`);
+      if (stored) {
+        setReadNotificationIds(new Set(JSON.parse(stored)));
+      } else {
+        setReadNotificationIds(new Set());
+      }
+    } catch {
+      setReadNotificationIds(new Set());
+    }
+  }, [currentMessId, user]);
+
+  // Real-time Firestore listener for mess_notifications collection
+  useEffect(() => {
+    if (!currentMessId) {
+      setCollectionNotifs([]);
+      return;
+    }
+    const notifsQuery = query(
+      collection(db, 'mess_notifications'),
+      where('messId', '==', currentMessId)
+    );
+    const unsub = onSnapshot(
+      notifsQuery,
+      (snapshot) => {
+        const notifs: MessNotification[] = [];
+        snapshot.forEach((d) => {
+          const item = d.data() as MessNotification;
+          item.id = item.id || d.id;
+          notifs.push(item);
+        });
+        setCollectionNotifs(notifs);
+      },
+      (err) => {
+        console.warn('Real-time listener for mess_notifications:', err);
+      }
+    );
+    return () => unsub();
+  }, [currentMessId]);
+
+  // Deduplicated notifications combined from messState.notifications and collectionNotifs (newest first)
+  const notificationsList: MessNotification[] = useMemo(() => {
+    const map = new Map<string, MessNotification>();
+    (messState?.notifications || []).forEach(n => {
+      if (n && n.id) map.set(n.id, n);
+    });
+    collectionNotifs.forEach(n => {
+      if (n && n.id) map.set(n.id, n);
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [messState?.notifications, collectionNotifs]);
+
+  const unreadNotificationCount = useMemo(() => {
+    return notificationsList.filter(n => !readNotificationIds.has(n.id)).length;
+  }, [notificationsList, readNotificationIds]);
+
+  const handleMarkAsRead = (notifId: string) => {
+    setReadNotificationIds(prev => {
+      const next = new Set(prev);
+      next.add(notifId);
+      if (user && currentMessId) {
+        try {
+          localStorage.setItem(
+            `khaonkhata_read_notifs_${user.uid}_${currentMessId}`,
+            JSON.stringify(Array.from(next))
+          );
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleMarkAllAsRead = () => {
+    const allIds = notificationsList.map(n => n.id);
+    const next = new Set(allIds);
+    setReadNotificationIds(next);
+    if (user && currentMessId) {
+      try {
+        localStorage.setItem(
+          `khaonkhata_read_notifs_${user.uid}_${currentMessId}`,
+          JSON.stringify(allIds)
+        );
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+    showToast('সব নোটিফিকেশন পঠিত চিহ্নিত করা হয়েছে');
+  };
+
+  const createNotification = async (params: {
+    type: NotificationType;
+    title: string;
+    body: string;
+    actorId?: string;
+    actorName?: string;
+    targetMemberId?: string;
+    amount?: number;
+    metadata?: Record<string, any>;
+  }): Promise<MessNotification | null> => {
+    if (!messState) return null;
+    try {
+      return await triggerMessNotification({
+        messId: messState.id,
+        messName: messState.mess,
+        ...params,
+      });
+    } catch (err) {
+      console.warn('triggerMessNotification notice:', err);
+      return null;
+    }
+  };
 
   // Unauthorized Domain Error Modal State
   const [unauthorizedDomainModal, setUnauthorizedDomainModal] = useState(false);
@@ -292,6 +431,7 @@ export default function App() {
           data.reqs = data.reqs || [];
           data.notices = data.notices || [];
           data.other = data.other || [];
+          data.notifications = data.notifications || [];
           data.closed = data.closed || {};
           data.cutoff = data.cutoff ?? 21;
           setMessState(data);
@@ -699,12 +839,28 @@ export default function App() {
       note: depNote.trim(),
     };
 
-    const nextState: MessState = {
-      ...messState,
-      deposits: [...messState.deposits, newDep],
-    };
+    const targetMember = messState.members.find(m => m.id === depMember);
+    const mName = targetMember?.name || 'সদস্য';
 
-    saveStateToFirestore(nextState, 'জমা যোগ হয়েছে');
+    createNotification({
+      type: 'deposit',
+      title: `💰 নতুন জমা যোগ: ${mName}`,
+      body: `${mName}-এর হিসাবে ৳${amt} জমা যোগ করা হয়েছে (${depDate})`,
+      actorId: user?.uid,
+      actorName: user?.displayName || 'ম্যানেজার',
+      targetMemberId: depMember,
+      amount: amt,
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        deposits: [...messState.deposits, newDep],
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+      };
+      saveStateToFirestore(nextState, 'জমা যোগ হয়েছে');
+    });
+
     setDepAmt('');
     setDepNote('');
   };
@@ -746,6 +902,23 @@ export default function App() {
           },
         ];
       }
+
+      const buyer = messState.members.find(m => m.id === costMember);
+      const byName = buyer?.name || 'সদস্য';
+
+      createNotification({
+        type: 'expense',
+        title: `🛒 নতুন বাজার খরচ: ৳${amt}`,
+        body: `${byName} বাজার করেছেন: ${costItems.trim() || 'দৈনিক বাজার'} (৳${amt}, ${costDate})`,
+        actorId: user?.uid,
+        actorName: byName,
+        amount: amt,
+      }).then(notif => {
+        if (notif) {
+          nextState.notifications = [notif, ...(nextState.notifications || [])].slice(0, 100);
+        }
+        saveStateToFirestore(nextState, 'খরচ যোগ হয়েছে');
+      });
     } else {
       if (costType === 'ind' && !costMember) {
         showToast('ব্যক্তিগত খরচের জন্য সদস্য নির্বাচন করুন');
@@ -760,9 +933,22 @@ export default function App() {
         m: costType === 'ind' ? costMember : undefined,
       };
       nextState.other = [...nextState.other, newOther];
+
+      createNotification({
+        type: 'expense',
+        title: `🧾 মেস খরচ যুক্ত হয়েছে: ৳${amt}`,
+        body: `${costItems.trim() || 'অন্যান্য খরচ'} - ৳${amt} (${costDate})`,
+        actorId: user?.uid,
+        actorName: user?.displayName || 'ম্যানেজার',
+        amount: amt,
+      }).then(notif => {
+        if (notif) {
+          nextState.notifications = [notif, ...(nextState.notifications || [])].slice(0, 100);
+        }
+        saveStateToFirestore(nextState, 'খরচ যোগ হয়েছে');
+      });
     }
 
-    saveStateToFirestore(nextState, 'খরচ যোগ হয়েছে');
     setCostAmt('');
     setCostItems('');
   };
@@ -792,13 +978,25 @@ export default function App() {
       return r;
     });
 
-    const nextState: MessState = {
-      ...messState,
-      meals: nextMeals,
-      reqs: nextReqs,
-    };
+    const totalDayMeals = Object.values(day).reduce((acc, slot) => acc + mt(slot), 0);
 
-    saveStateToFirestore(nextState, 'মিল সেভ হয়েছে!');
+    createNotification({
+      type: 'meal',
+      title: `🍽️ মিল আপডেট: ${mealDate}`,
+      body: `ম্যানেজার ${mealDate} তারিখের মিল আপডেট করেছেন (মোট ${totalDayMeals}টি মিল)`,
+      actorId: user?.uid,
+      actorName: user?.displayName || 'ম্যানেজার',
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        meals: nextMeals,
+        reqs: nextReqs,
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+      };
+      saveStateToFirestore(nextState, 'মিল সেভ হয়েছে!');
+    });
 
     // Trigger push notification for members whose meal was added or updated
     messState.members.forEach((m) => {
@@ -892,17 +1090,32 @@ export default function App() {
           }
         : r
     );
-    const nextState: MessState = {
-      ...messState,
-      deposits: [...messState.deposits, newDeposit],
-      depositRequests: nextRequests,
-      updatedAt: new Date().toISOString(),
-    };
-    await saveStateToFirestore(nextState, 'জমা সফলভাবে অনুমোদন করা হয়েছে!');
+
+    createNotification({
+      type: 'deposit',
+      title: `✅ জমা অনুমোদন: ${req.memberName}`,
+      body: `${req.memberName}-এর ৳${req.amount} জমা সফলভাবে অনুমোদিত হয়েছে`,
+      actorId: user?.uid,
+      actorName: user?.displayName || 'ম্যানেজার',
+      targetMemberId: req.memberId,
+      amount: req.amount,
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        deposits: [...messState.deposits, newDeposit],
+        depositRequests: nextRequests,
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+        updatedAt: new Date().toISOString(),
+      };
+      saveStateToFirestore(nextState, 'জমা সফলভাবে অনুমোদন করা হয়েছে!');
+    });
   };
 
   const handleRejectDepositRequest = async (reqId: string) => {
     if (!messState || !checkManagerGuard()) return;
+    const targetReq = (messState.depositRequests || []).find(r => r.id === reqId);
     const nextRequests = (messState.depositRequests || []).map(r =>
       r.id === reqId
         ? {
@@ -913,12 +1126,25 @@ export default function App() {
           }
         : r
     );
-    const nextState: MessState = {
-      ...messState,
-      depositRequests: nextRequests,
-      updatedAt: new Date().toISOString(),
-    };
-    await saveStateToFirestore(nextState, 'জমা রিকোয়েস্ট বাতিল করা হয়েছে');
+
+    createNotification({
+      type: 'deposit',
+      title: `❌ জমা রিকোয়েস্ট বাতিল: ${targetReq?.memberName || 'সদস্য'}`,
+      body: `${targetReq?.memberName || 'সদস্য'}-এর ৳${targetReq?.amount || 0} জমা রিকোয়েস্ট বাতিল করা হয়েছে`,
+      actorId: user?.uid,
+      actorName: user?.displayName || 'ম্যানেজার',
+      amount: targetReq?.amount,
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        depositRequests: nextRequests,
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+        updatedAt: new Date().toISOString(),
+      };
+      saveStateToFirestore(nextState, 'জমা রিকোয়েস্ট বাতিল করা হয়েছে');
+    });
   };
 
   const handleSubmitMemberDeposit = async (data: {
@@ -952,13 +1178,24 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
 
-    const nextState: MessState = {
-      ...messState,
-      depositRequests: [newReq, ...(messState.depositRequests || [])],
-      updatedAt: new Date().toISOString(),
-    };
-
-    await saveStateToFirestore(nextState, 'জমা রিকোয়েস্ট সফলভাবে জমা হয়েছে!');
+    createNotification({
+      type: 'deposit',
+      title: `💳 জমা রিকোয়েস্ট: ${memberName}`,
+      body: `${memberName} ৳${data.amount} জমা রিকোয়েস্ট পাঠিয়েছেন (${data.method.toUpperCase()} - ${data.senderNumber})`,
+      actorId: memberId,
+      actorName: memberName,
+      amount: Number(data.amount) || 0,
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        depositRequests: [newReq, ...(messState.depositRequests || [])],
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+        updatedAt: new Date().toISOString(),
+      };
+      saveStateToFirestore(nextState, 'জমা রিকোয়েস্ট সফলভাবে জমা হয়েছে!');
+    });
   };
 
   // Submit Meal Request (Members)
@@ -992,12 +1229,23 @@ export default function App() {
       status: 'pending',
     };
 
-    const nextState: MessState = {
-      ...messState,
-      reqs: [...messState.reqs, newReq],
-    };
-
-    saveStateToFirestore(nextState, 'রিকোয়েস্ট পাঠানো হয়েছে');
+    createNotification({
+      type: 'meal',
+      title: `🍽️ মিল রিকোয়েস্ট: ${currentMember.name}`,
+      body: `${currentMember.name} ${dateStr} তারিখের জন্য ${b + l + d} টি মিলের রিকোয়েস্ট পাঠিয়েছেন`,
+      actorId: currentMember.id,
+      actorName: currentMember.name,
+      metadata: { b, l, d, date: dateStr },
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        reqs: [...messState.reqs, newReq],
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+      };
+      saveStateToFirestore(nextState, 'রিকোয়েস্ট পাঠানো হয়েছে');
+    });
   };
 
   // Approve Meal Request
@@ -1015,16 +1263,28 @@ export default function App() {
       r.id === reqId ? { ...r, status: 'approved' as const } : r
     );
 
-    const nextState: MessState = {
-      ...messState,
-      meals: nextMeals,
-      reqs: nextReqs,
-    };
+    const targetMember = messState.members.find((m) => m.id === target.m);
 
-    saveStateToFirestore(nextState, 'রিকোয়েস্ট অ্যাপ্রুভ হয়েছে');
+    createNotification({
+      type: 'meal',
+      title: `✅ মিল রিকোয়েস্ট অনুমোদিত: ${targetMember?.name || 'সদস্য'}`,
+      body: `${targetMember?.name || 'সদস্য'}-এর ${target.date} তারিখের ${target.b + target.l + target.d} টি মিল অনুমোদিত হয়েছে`,
+      actorId: user?.uid,
+      actorName: user?.displayName || 'ম্যানেজার',
+      targetMemberId: target.m,
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        meals: nextMeals,
+        reqs: nextReqs,
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+      };
+      saveStateToFirestore(nextState, 'রিকোয়েস্ট অ্যাপ্রুভ হয়েছে');
+    });
 
     // Trigger push notification for approved meal request
-    const targetMember = messState.members.find((m) => m.id === target.m);
     triggerMealPushNotification({
       messId: messState.id,
       messName: messState.mess,
@@ -1039,16 +1299,30 @@ export default function App() {
   // Reject Meal Request
   const handleRejectReq = (reqId: string) => {
     if (!checkManagerGuard() || !messState) return;
+    const target = messState.reqs.find(r => r.id === reqId);
+    const targetMember = target ? messState.members.find((m) => m.id === target.m) : null;
+
     const nextReqs = messState.reqs.map(r =>
       r.id === reqId ? { ...r, status: 'rejected' as const } : r
     );
 
-    const nextState: MessState = {
-      ...messState,
-      reqs: nextReqs,
-    };
-
-    saveStateToFirestore(nextState, 'রিকোয়েস্ট বাতিল করা হয়েছে');
+    createNotification({
+      type: 'meal',
+      title: `❌ মিল রিকোয়েস্ট বাতিল: ${targetMember?.name || 'সদস্য'}`,
+      body: `${targetMember?.name || 'সদস্য'}-এর ${target?.date || ''} তারিখের মিল রিকোয়েস্ট বাতিল করা হয়েছে`,
+      actorId: user?.uid,
+      actorName: user?.displayName || 'ম্যানেজার',
+      targetMemberId: target?.m,
+    }).then(notif => {
+      const nextState: MessState = {
+        ...messState,
+        reqs: nextReqs,
+        notifications: notif
+          ? [notif, ...(messState.notifications || [])].slice(0, 100)
+          : messState.notifications,
+      };
+      saveStateToFirestore(nextState, 'রিকোয়েস্ট বাতিল করা হয়েছে');
+    });
   };
 
   // Bengali Month Names
@@ -1580,6 +1854,22 @@ export default function App() {
             ›
           </button>
 
+          {/* Interactive Notification Bell Icon with Red Counter Badge */}
+          <button
+            type="button"
+            className="pill relative !p-2 flex items-center justify-center cursor-pointer transition-transform active:scale-95 text-[var(--fg)] hover:bg-[var(--line)]"
+            onClick={() => setIsNotificationOpen(true)}
+            aria-label="Notifications"
+            title="নোটিফিকেশন"
+          >
+            <Icon name="bell" size={19} />
+            {unreadNotificationCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md animate-pulse">
+                {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+              </span>
+            )}
+          </button>
+
           {/* User profile avatar pill */}
           <button
             className="pill pav"
@@ -1799,10 +2089,24 @@ export default function App() {
                             text: vals.text.trim(),
                             date: TD,
                           };
-                          saveStateToFirestore(
-                            { ...messState, notices: [...messState.notices, newNotice] },
-                            'নোটিশ প্রকাশ করা হয়েছে'
-                          );
+                          createNotification({
+                            type: 'notice',
+                            title: `📢 নতুন মেস নোটিশ`,
+                            body: vals.text.trim(),
+                            actorId: user?.uid,
+                            actorName: user?.displayName || 'ম্যানেজার',
+                          }).then(notif => {
+                            saveStateToFirestore(
+                              {
+                                ...messState,
+                                notices: [...messState.notices, newNotice],
+                                notifications: notif
+                                  ? [notif, ...(messState.notifications || [])].slice(0, 100)
+                                  : messState.notifications,
+                              },
+                              'নোটিশ প্রকাশ করা হয়েছে'
+                            );
+                          });
                         },
                       });
                     }}
@@ -3710,6 +4014,20 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Interactive Notification List Modal */}
+      <NotificationModal
+        isOpen={isNotificationOpen}
+        onClose={() => setIsNotificationOpen(false)}
+        notifications={notificationsList}
+        readIds={readNotificationIds}
+        onMarkAllAsRead={handleMarkAllAsRead}
+        onMarkAsRead={handleMarkAsRead}
+        onNavigateTab={(targetTab) => {
+          setTab(targetTab as any);
+          setDrawerOpen(false);
+        }}
+      />
 
       {/* Global Toast */}
       <Toast message={toastMsg} />
