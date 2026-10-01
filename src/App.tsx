@@ -30,6 +30,9 @@ import {
   MealRequest,
   Notice,
   UserProfile,
+  PaymentMethodKey,
+  PaymentMethodsConfig,
+  MemberDepositRequest,
 } from './types';
 import {
   TD,
@@ -47,10 +50,14 @@ import { Modal, ModalField } from './components/Modal';
 import { Toast } from './components/Toast';
 import { AddMemberModal } from './components/AddMemberModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
+import { ManagerPaymentMethods } from './components/ManagerPaymentMethods';
+import { MemberDeposit } from './components/MemberDeposit';
 import {
   requestFcmPermissionAndGetToken,
   setupFcmForegroundListener,
   triggerMealPushNotification,
+  dispatchTargetedDailyMealNotifications,
+  TargetedMealPushResult,
 } from './utils/fcm';
 
 export default function App() {
@@ -69,7 +76,7 @@ export default function App() {
   const [userMesses, setUserMesses] = useState<{ id: string; name: string; mgrEmail: string }[]>([]);
 
   // Navigation & View
-  const [tab, setTab] = useState<'home' | 'deposit' | 'meal' | 'cost' | 'members' | 'detail' | 'active' | 'all' | 'settings' | 'profile'>('home');
+  const [tab, setTab] = useState<'home' | 'deposit' | 'meal' | 'cost' | 'members' | 'detail' | 'active' | 'all' | 'settings' | 'profile' | 'payment_methods' | 'member_deposit'>('home');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [activeYM, setActiveYM] = useState<string>(TD.slice(0, 7));
   const [detailMemberId, setDetailMemberId] = useState<string | null>(null);
@@ -114,6 +121,14 @@ export default function App() {
 
   // Add Member Modal State
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+
+  // Targeted Meal Push Notification State
+  const [targetedPushLoading, setTargetedPushLoading] = useState(false);
+  const [targetedPushResult, setTargetedPushResult] = useState<TargetedMealPushResult | null>(null);
+  const [isTargetedReportOpen, setIsTargetedReportOpen] = useState(false);
+
+  // Unauthorized Domain Error Modal State
+  const [unauthorizedDomainModal, setUnauthorizedDomainModal] = useState(false);
 
   // Generic Modal
   const [modalConfig, setModalConfig] = useState<{
@@ -324,15 +339,35 @@ export default function App() {
     setMealDraft(draft);
   }, [mealDate, messState]);
 
+  // Sanitize object recursively removing undefined keys for Firestore
+  const cleanUndefined = <T,>(val: T): T => {
+    if (val === null || val === undefined) return val;
+    if (Array.isArray(val)) {
+      return val.map(item => cleanUndefined(item)) as unknown as T;
+    }
+    if (typeof val === 'object') {
+      const res: any = {};
+      for (const [k, v] of Object.entries(val)) {
+        if (v !== undefined) {
+          res[k] = cleanUndefined(v);
+        }
+      }
+      return res;
+    }
+    return val;
+  };
+
   // Save updated messState to Firestore (triggers real-time onSnapshot for everyone!)
   const saveStateToFirestore = async (newState: MessState, successMsg?: string) => {
     if (!newState.id) return;
     try {
       newState.updatedAt = new Date().toISOString();
+      const sanitized = cleanUndefined(newState);
       const messDocRef = doc(db, 'messes', newState.id);
-      await setDoc(messDocRef, newState, { merge: true });
+      await setDoc(messDocRef, sanitized, { merge: true });
       if (successMsg) showToast(successMsg);
     } catch (err) {
+      console.error('saveStateToFirestore error:', err);
       handleFirestoreError(err, OperationType.WRITE, 'messes/' + newState.id);
       showToast('সেভ করতে সমস্যা হয়েছে');
     }
@@ -374,6 +409,52 @@ export default function App() {
     setActiveYM(ds(nextDate).slice(0, 7));
   };
 
+  // Demo Login Handler (Fall back when domain is not authorized in Firebase Console)
+  const handleDemoLogin = async () => {
+    const demoUser = {
+      uid: 'demo_user_manager',
+      displayName: 'রেদোয়ান আহমেদ (ম্যানেজার)',
+      email: 'redueanahamedrahat@gmail.com',
+      photoURL: '',
+      emailVerified: true,
+      isAnonymous: false,
+    } as unknown as User;
+
+    setUser(demoUser);
+    setUnauthorizedDomainModal(false);
+    showToast('স্বাগতম, রেদোয়ান আহমেদ (ম্যানেজার)');
+
+    try {
+      const userDocRef = doc(db, 'users', demoUser.uid);
+      const snap = await getDoc(userDocRef);
+      if (snap.exists()) {
+        const data = snap.data() as UserProfile;
+        setProfile(data);
+        if (data.currentMessId && !currentMessId) {
+          setCurrentMessId(data.currentMessId);
+          localStorage.setItem('mm_cur_mess_id', data.currentMessId);
+        }
+      } else {
+        const newProfile: UserProfile = {
+          uid: demoUser.uid,
+          name: demoUser.displayName || 'ম্যানেজার',
+          email: demoUser.email || '',
+          joinedMesses: [],
+        };
+        await setDoc(userDocRef, newProfile);
+        setProfile(newProfile);
+      }
+    } catch (e) {
+      console.warn('Demo profile setup note:', e);
+      setProfile({
+        uid: demoUser.uid,
+        name: demoUser.displayName || 'ম্যানেজার',
+        email: demoUser.email || '',
+        joinedMesses: [],
+      });
+    }
+  };
+
   // Google Sign-in Handler
   const handleGoogleSignIn = async () => {
     try {
@@ -381,22 +462,34 @@ export default function App() {
       if (res.user) {
         showToast(`স্বাগতম, ${res.user.displayName || 'ব্যবহারকারী'}`);
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Google sign-in error:', err);
-      showToast('গুগল লগইন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+      const errorObj = err as { code?: string; message?: string };
+      if (errorObj?.code === 'auth/unauthorized-domain' || errorObj?.message?.includes('unauthorized-domain')) {
+        setUnauthorizedDomainModal(true);
+      } else {
+        showToast('গুগল লগইন ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
+      }
     }
   };
 
   // Sign-out Handler
   const handleSignOut = async () => {
     try {
-      await signOut(auth);
+      if (auth.currentUser) {
+        await signOut(auth);
+      }
+      setUser(null);
       setCurrentMessId('');
       localStorage.removeItem('mm_cur_mess_id');
       setMessState(null);
       showToast('লগআউট সম্পন্ন হয়েছে');
     } catch (err) {
       console.error('Sign-out error:', err);
+      setUser(null);
+      setCurrentMessId('');
+      localStorage.removeItem('mm_cur_mess_id');
+      setMessState(null);
     }
   };
 
@@ -736,6 +829,138 @@ export default function App() {
     });
   };
 
+  // Targeted Meal Push Notification Handler (Manager)
+  const handleSendTargetedPush = async () => {
+    if (!checkManagerGuard() || !messState) return;
+    setTargetedPushLoading(true);
+    try {
+      showToast('সদস্যদের মিল যাচাই করে পুশ নোটিফিকেশন পাঠানো হচ্ছে...');
+      const todayDate = TD;
+      const todayMeals = messState.meals[todayDate] || {};
+
+      const result = await dispatchTargetedDailyMealNotifications({
+        messId: messState.id,
+        messName: messState.mess,
+        members: messState.members,
+        todayDate,
+        mealsForDate: todayMeals,
+      });
+
+      setTargetedPushResult(result);
+      setIsTargetedReportOpen(true);
+      showToast(`✅ নোটিফিকেশন সম্পন্ন: ${result.hasMealCount} জনের মিল যুক্ত, ${result.noMealCount} জনের মিল বাকি`);
+    } catch (err) {
+      console.error('Targeted push notification error:', err);
+      showToast('পুশ নোটিফিকেশন পাঠাতে সমস্যা হয়েছে।');
+    } finally {
+      setTargetedPushLoading(false);
+    }
+  };
+
+  // Payment Methods & Member Deposit Handlers
+  const handleSavePaymentMethods = async (updatedMethods: PaymentMethodsConfig) => {
+    if (!messState || !checkManagerGuard()) return;
+    const nextState: MessState = {
+      ...messState,
+      paymentMethods: updatedMethods,
+      updatedAt: new Date().toISOString(),
+    };
+    await saveStateToFirestore(nextState, 'পেমেন্ট মেথড সেভ হয়েছে!');
+  };
+
+  const handleApproveDepositRequest = async (req: MemberDepositRequest) => {
+    if (!messState || !checkManagerGuard()) return;
+    const targetMember = messState.members.find(
+      m => m.id === req.memberId || (m.uid && m.uid === req.memberId)
+    );
+    const targetMemberId = targetMember ? targetMember.id : req.memberId;
+
+    const newDeposit: Deposit = {
+      id: uid(),
+      m: targetMemberId,
+      amt: req.amount,
+      date: req.date || TD,
+      note: `অনলাইন ডিপোজিট (${req.method.toUpperCase()} - ${req.senderNumber})`,
+    };
+    const nextRequests = (messState.depositRequests || []).map(r =>
+      r.id === req.id
+        ? {
+            ...r,
+            status: 'approved' as const,
+            reviewedAt: new Date().toISOString(),
+            reviewedBy: user?.displayName || 'ম্যানেজার',
+          }
+        : r
+    );
+    const nextState: MessState = {
+      ...messState,
+      deposits: [...messState.deposits, newDeposit],
+      depositRequests: nextRequests,
+      updatedAt: new Date().toISOString(),
+    };
+    await saveStateToFirestore(nextState, 'জমা সফলভাবে অনুমোদন করা হয়েছে!');
+  };
+
+  const handleRejectDepositRequest = async (reqId: string) => {
+    if (!messState || !checkManagerGuard()) return;
+    const nextRequests = (messState.depositRequests || []).map(r =>
+      r.id === reqId
+        ? {
+            ...r,
+            status: 'rejected' as const,
+            reviewedAt: new Date().toISOString(),
+            reviewedBy: user?.displayName || 'ম্যানেজার',
+          }
+        : r
+    );
+    const nextState: MessState = {
+      ...messState,
+      depositRequests: nextRequests,
+      updatedAt: new Date().toISOString(),
+    };
+    await saveStateToFirestore(nextState, 'জমা রিকোয়েস্ট বাতিল করা হয়েছে');
+  };
+
+  const handleSubmitMemberDeposit = async (data: {
+    method: PaymentMethodKey;
+    amount: number;
+    senderNumber: string;
+    trxId?: string;
+  }) => {
+    if (!messState) {
+      showToast('মেসের তথ্য এখনো লোড হয়নি');
+      return;
+    }
+
+    const memberId = currentMember?.id || user?.uid || uid();
+    const memberName =
+      currentMember?.name ||
+      user?.displayName ||
+      user?.email?.split('@')[0] ||
+      'সদস্য';
+
+    const newReq: MemberDepositRequest = {
+      id: uid(),
+      memberId,
+      memberName,
+      method: data.method,
+      amount: Number(data.amount) || 0,
+      senderNumber: String(data.senderNumber || '').trim(),
+      trxId: String(data.trxId || '').trim(),
+      date: TD,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    const nextState: MessState = {
+      ...messState,
+      depositRequests: [newReq, ...(messState.depositRequests || [])],
+      updatedAt: new Date().toISOString(),
+    };
+
+    await saveStateToFirestore(nextState, 'জমা রিকোয়েস্ট সফলভাবে জমা হয়েছে!');
+  };
+
   // Submit Meal Request (Members)
   const handleSubmitMealRequest = (b: number, l: number, d: number, dateStr: string) => {
     if (!messState || !currentMember) return;
@@ -894,12 +1119,98 @@ export default function App() {
             <span>Google দিয়ে চালিয়ে যান</span>
           </button>
 
+          <div className="relative my-4">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-[var(--line)]"></div>
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-[var(--card)] px-2 text-[var(--mut)]">অথবা</span>
+            </div>
+          </div>
+
+          <button
+            onClick={handleDemoLogin}
+            className="w-full py-3 px-6 rounded-2xl bg-[var(--line)] hover:bg-[var(--line)]/80 text-[var(--fg)] font-semibold border border-[var(--line)] flex items-center justify-center gap-2 transition-all cursor-pointer text-sm"
+          >
+            <span>👤 সরাসরি ডেমো / টেস্ট মোডে প্রবেশ করুন</span>
+          </button>
+
           <div className="mt-8 pt-6 border-t border-[var(--line)] text-center text-xs text-[var(--mut)] space-y-1">
             <p>✓ তাৎক্ষণিক রিয়েলটাইম সিঙ্ক (Firestore)</p>
             <p>✓ প্রতিদিনের মিল চার্ট, বাজার খরচ ও জমা</p>
             <p>✓ স্বয়ংক্রিয় মিল রেট ও ব্যালেন্স হিসাব</p>
           </div>
         </div>
+
+        {/* Unauthorized Domain Error Modal */}
+        {unauthorizedDomainModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="card !max-w-md w-full p-6 space-y-4 shadow-2xl">
+              <div className="flex items-center gap-3 text-amber-600">
+                <span className="text-2xl">⚠️</span>
+                <h3 className="text-base font-bold text-[var(--fg)]">
+                  Firebase ডোমেইন অনুমোদন প্রয়োজন
+                </h3>
+              </div>
+
+              <p className="text-xs text-[var(--mut)] leading-relaxed">
+                আপনার Firebase প্রজেক্টে (<b>khaonkhata</b>) গুগল সাইন-ইন চালু করতে এই ডোমেইনটি Authorized Domains তালিকায় যুক্ত করতে হবে:
+              </p>
+
+              {/* Domain Copy Box */}
+              <div className="p-3 rounded-xl bg-[var(--line)] flex items-center justify-between gap-2">
+                <code className="text-xs font-mono break-all text-emerald-600 dark:text-emerald-400 font-semibold select-all">
+                  {typeof window !== 'undefined' ? window.location.hostname : ''}
+                </code>
+                <button
+                  className="btn s !bg-emerald-600 !text-white flex-shrink-0 cursor-pointer"
+                  onClick={() => {
+                    if (typeof window !== 'undefined') {
+                      navigator.clipboard.writeText(window.location.hostname);
+                      showToast('✅ ডোমেইন কপি হয়েছে!');
+                    }
+                  }}
+                >
+                  কপি
+                </button>
+              </div>
+
+              <div className="text-xs text-[var(--mut)] space-y-1.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <b>ডোমেইন যুক্ত করার সহজ ৩টি ধাপ:</b>
+                <ol className="list-decimal pl-4 space-y-1 mt-1 text-[var(--fg)]">
+                  <li>
+                    Firebase Console-এ যান:{' '}
+                    <a
+                      href="https://console.firebase.google.com/project/khaonkhata/authentication/settings"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-emerald-600 underline font-medium"
+                    >
+                      Auth &gt; Settings
+                    </a>
+                  </li>
+                  <li><b>Authorized domains</b> সেকশনে <b>Add domain</b>-এ ক্লিক করুন</li>
+                  <li>কপি করা ডোমেইনটি পেস্ট করে সেভ করুন।</li>
+                </ol>
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <button
+                  className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 w-full cursor-pointer text-sm font-semibold"
+                  onClick={handleDemoLogin}
+                >
+                  🚀 ডেমো ম্যানেজার হিসেবে এখনই প্রবেশ করুন
+                </button>
+                <button
+                  className="btn g s w-full cursor-pointer text-xs"
+                  onClick={() => setUnauthorizedDomainModal(false)}
+                >
+                  বন্ধ করুন
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         <Toast message={toastMsg} />
       </div>
     );
@@ -1069,6 +1380,7 @@ export default function App() {
   const todayMeals = messState.meals[TD] || {};
   const todayEaters = messState.members.filter(m => mt(todayMeals[m.id]) > 0);
   const pendingReqCount = messState.reqs.filter(r => r.status === 'pending').length;
+  const pendingDepositCount = (messState.depositRequests || []).filter(r => r.status === 'pending').length;
 
   // Daily Bazar Bar Chart calculation
   const dim = new Date(+activeYear, +activeMonthNum, 0).getDate();
@@ -1141,6 +1453,31 @@ export default function App() {
           >
             <Icon name="cart" size={18} />
             <span>Cost</span>
+          </button>
+        )}
+
+        {isManager && (
+          <button
+            className={tab === 'payment_methods' ? 'on' : ''}
+            onClick={() => { setTab('payment_methods'); setDrawerOpen(false); }}
+          >
+            <Icon name="wallet" size={18} />
+            <span>Payment Methods</span>
+            {pendingDepositCount > 0 && (
+              <span className="ml-auto bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
+                {pendingDepositCount}
+              </span>
+            )}
+          </button>
+        )}
+
+        {!isManager && (
+          <button
+            className={tab === 'member_deposit' ? 'on' : ''}
+            onClick={() => { setTab('member_deposit'); setDrawerOpen(false); }}
+          >
+            <Icon name="wallet" size={18} />
+            <span>Deposit</span>
           </button>
         )}
 
@@ -1219,6 +1556,8 @@ export default function App() {
             {tab === 'all' && 'All Month Details'}
             {tab === 'settings' && 'Mess Settings'}
             {tab === 'profile' && 'Profile'}
+            {tab === 'payment_methods' && 'পেমেন্ট মেথড (Payment Methods)'}
+            {tab === 'member_deposit' && 'টাকা জমা (Deposit)'}
           </h1>
 
           {/* Month selector pills */}
@@ -1358,7 +1697,53 @@ export default function App() {
                 <i><Icon name="req" size={22} /></i>
                 Request {pendingReqCount > 0 ? `(${pendingReqCount})` : ''}
               </button>
+
+              {/* For Regular Members: Next to Request option, show Deposit */}
+              {!isManager && (
+                <button onClick={() => setTab('member_deposit')}>
+                  <i><Icon name="wallet" size={22} /></i>
+                  Deposit
+                </button>
+              )}
             </div>
+
+            {/* Under the existing 4 options: 5th option named Payment Methods (Visible ONLY to Manager) */}
+            {isManager && (
+              <div className="mb-4">
+                <button
+                  onClick={() => setTab('payment_methods')}
+                  className="w-full p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 hover:border-emerald-500 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 flex items-center justify-between text-[var(--fg)] transition-all cursor-pointer shadow-xs"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                      <Icon name="wallet" size={20} />
+                    </span>
+                    <div className="text-left">
+                      <div className="flex items-center gap-2">
+                        <b className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
+                          Payment Methods (পেমেন্ট মেথড)
+                        </b>
+                        <span className="tag text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-500/20">
+                          ম্যানেজার অপশন
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--mut)] mt-0.5">
+                        বিকাশ, নগদ, রকেট, উপায় ও বাংলা কিউআর পেমেন্ট তথ্য সেট করুন
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {pendingDepositCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-bold">
+                        {pendingDepositCount} নতুন জমা রিকোয়েস্ট
+                      </span>
+                    )}
+                    <span className="text-xl text-emerald-600 dark:text-emerald-400 font-bold">›</span>
+                  </div>
+                </button>
+              </div>
+            )}
 
             {/* Today's Eaters */}
             <div className="card">
@@ -1716,12 +2101,32 @@ export default function App() {
                     })}
                 </div>
 
-                <button
-                  className="btn big mt-4"
-                  onClick={handleSaveMealDraft}
-                >
-                  Save Realtime Meals
-                </button>
+                <div className="flex flex-col sm:flex-row gap-2 mt-4">
+                  <button
+                    className="btn big flex-1"
+                    onClick={handleSaveMealDraft}
+                  >
+                    Save Realtime Meals
+                  </button>
+                  <button
+                    className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 flex items-center justify-center gap-1.5 cursor-pointer text-sm font-semibold"
+                    disabled={targetedPushLoading}
+                    onClick={handleSendTargetedPush}
+                    title="আজকের মিল স্ট্যাটাস অনুযায়ী সদস্যদের পুশ নোটিফিকেশন পাঠান"
+                  >
+                    {targetedPushLoading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        <span>পাঠানো হচ্ছে...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Icon name="bell" size={16} />
+                        <span>পুশ নোটিফিকেশন পাঠান</span>
+                      </>
+                    )}
+                  </button>
+                </div>
               </>
             )}
 
@@ -2869,6 +3274,47 @@ export default function App() {
                   টেস্ট পুশ পাঠান
                 </button>
               </div>
+
+              {/* Targeted Meal Push Notifications (Manager only) */}
+              {isManager && (
+                <div className="pt-2 border-t border-[var(--line)]">
+                  <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 font-semibold text-sm">
+                        <span>📢</span>
+                        <span className="text-[var(--fg)]">টার্গেটেড মিল পুশ নোটিফিকেশন</span>
+                      </div>
+                      <span className="tag text-xs text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-500/15">
+                        ম্যানেজার অপশন
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-[var(--mut)] leading-relaxed">
+                      আজকের মিল এন্ট্রি করার পর এই বাটনে চাপুন। স্বয়ংক্রিয়ভাবে সদস্যদের বর্তমান মিল রেকর্ড অনুযায়ী নির্দিষ্ট নোটিফিকেশন যাবে:
+                      <br />• <b>মিল যুক্ত সদস্যদের:</b> &quot;আপনার আজকের মিল যুক্ত করা হয়েছে।&quot;
+                      <br />• <b>মিল না থাকা সদস্যদের:</b> &quot;আপনার এখনো মিল দেওয়া হয় নি।&quot;
+                    </p>
+
+                    <button
+                      className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 !w-full !py-2.5 flex items-center justify-center gap-2 text-xs font-semibold shadow-sm cursor-pointer"
+                      disabled={targetedPushLoading}
+                      onClick={handleSendTargetedPush}
+                    >
+                      {targetedPushLoading ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>সদস্যদের নির্দিষ্ট নোটিফিকেশন পাঠানো হচ্ছে...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="bell" size={15} />
+                          <span>আজকের মিল স্ট্যাটাস পুশ নোটিফিকেশন পাঠান</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Profile Action Buttons */}
@@ -2898,6 +3344,33 @@ export default function App() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* --- VIEW: MANAGER PAYMENT METHODS --- */}
+        {tab === 'payment_methods' && isManager && (
+          <ManagerPaymentMethods
+            messId={messState.id}
+            paymentMethods={messState.paymentMethods}
+            depositRequests={messState.depositRequests}
+            onSaveMethods={handleSavePaymentMethods}
+            onApproveDeposit={handleApproveDepositRequest}
+            onRejectDeposit={handleRejectDepositRequest}
+            showToast={showToast}
+          />
+        )}
+
+        {/* --- VIEW: MEMBER DEPOSIT --- */}
+        {tab === 'member_deposit' && (
+          <MemberDeposit
+            paymentMethods={messState.paymentMethods}
+            myDepositRequests={(messState.depositRequests || []).filter(r =>
+              currentMember
+                ? r.memberId === currentMember.id || (user && r.memberId === user.uid)
+                : true
+            )}
+            onSubmitDeposit={handleSubmitMemberDeposit}
+            showToast={showToast}
+          />
         )}
       </main>
 
@@ -2939,6 +3412,16 @@ export default function App() {
           >
             <Icon name="cart" size={20} />
             <span>Cost</span>
+          </button>
+        )}
+
+        {!isManager && (
+          <button
+            className={tab === 'member_deposit' ? 'on' : ''}
+            onClick={() => { setTab('member_deposit'); setDrawerOpen(false); }}
+          >
+            <Icon name="wallet" size={20} />
+            <span>Deposit</span>
           </button>
         )}
 
@@ -3032,6 +3515,31 @@ export default function App() {
             </button>
           )}
 
+          {isManager && (
+            <button
+              className={tab === 'payment_methods' ? 'on' : ''}
+              onClick={() => { setTab('payment_methods'); setDrawerOpen(false); }}
+            >
+              <Icon name="wallet" size={18} />
+              <span>Payment Methods</span>
+              {pendingDepositCount > 0 && (
+                <span className="ml-auto px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-bold">
+                  {pendingDepositCount}
+                </span>
+              )}
+            </button>
+          )}
+
+          {!isManager && (
+            <button
+              className={tab === 'member_deposit' ? 'on' : ''}
+              onClick={() => { setTab('member_deposit'); setDrawerOpen(false); }}
+            >
+              <Icon name="wallet" size={18} />
+              <span>Deposit (টাকা জমা দিন)</span>
+            </button>
+          )}
+
           <button
             className={tab === 'active' ? 'on' : ''}
             onClick={() => { setTab('active'); setDrawerOpen(false); }}
@@ -3120,6 +3628,88 @@ export default function App() {
         confirmText={modalConfig.confirmText}
         deleteText={modalConfig.deleteText}
       />
+
+      {/* Targeted Push Notification Breakdown Modal */}
+      {isTargetedReportOpen && targetedPushResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="card !max-w-lg w-full max-h-[85vh] flex flex-col p-5 shadow-2xl space-y-4 overflow-hidden">
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line)]">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📢</span>
+                <div>
+                  <h3 className="text-base font-bold">টার্গেটেড পুশ নোটিফিকেশন রিপোর্ট</h3>
+                  <p className="text-xs text-[var(--mut)]">তারিখ: {TD} ({messState.mess})</p>
+                </div>
+              </div>
+              <button
+                className="w-8 h-8 rounded-full bg-[var(--line)] flex items-center justify-center text-sm font-bold hover:opacity-80 cursor-pointer"
+                onClick={() => setIsTargetedReportOpen(false)}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Metrics */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="p-2.5 rounded-xl bg-[var(--line)]">
+                <p className="text-xs text-[var(--mut)]">মোট সদস্য</p>
+                <b className="text-lg">{targetedPushResult.totalMembers}</b>
+              </div>
+              <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300">মিল যুক্ত হয়েছে</p>
+                <b className="text-lg text-emerald-600 dark:text-emerald-400">{targetedPushResult.hasMealCount}</b>
+              </div>
+              <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
+                <p className="text-xs text-amber-700 dark:text-amber-300">মিল দেওয়া হয়নি</p>
+                <b className="text-lg text-amber-600 dark:text-amber-400">{targetedPushResult.noMealCount}</b>
+              </div>
+            </div>
+
+            {/* Members List Breakdown */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              <p className="text-xs font-semibold text-[var(--mut)]">প্রতি সদস্যের কাছে পাঠানো নির্দিষ্ট বার্তা:</p>
+              {targetedPushResult.details.map((item) => (
+                <div
+                  key={item.memberId}
+                  className={`p-3 rounded-xl border text-xs space-y-1 ${
+                    item.hasMeal
+                      ? 'bg-emerald-500/5 border-emerald-500/20'
+                      : 'bg-amber-500/5 border-amber-500/20'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-semibold">
+                    <span className="text-sm">{item.memberName}</span>
+                    <span
+                      className={`tag text-[11px] font-bold ${
+                        item.hasMeal
+                          ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/60'
+                          : 'text-amber-700 bg-amber-100 dark:bg-amber-900/60'
+                      }`}
+                    >
+                      {item.hasMeal ? `✓ মিল যুক্ত (${item.meals} টি)` : '✕ মিল নেই'}
+                    </span>
+                  </div>
+                  <p className="text-[var(--fg)] italic">&ldquo;{item.body}&rdquo;</p>
+                  <div className="flex items-center justify-between text-[10px] text-[var(--mut)] pt-0.5">
+                    <span>{item.title}</span>
+                    <span>{item.token ? '📱 FCM Token সক্রিয়' : 'ইন-অ্যাপ সংরক্ষিত'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Close Button */}
+            <div className="pt-2 border-t border-[var(--line)]">
+              <button
+                className="btn big !w-full cursor-pointer"
+                onClick={() => setIsTargetedReportOpen(false)}
+              >
+                ঠিক আছে (বন্ধ করুন)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Global Toast */}
       <Toast message={toastMsg} />

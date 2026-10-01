@@ -1,5 +1,5 @@
 import { getMessaging, getToken, onMessage, isSupported, Messaging } from 'firebase/messaging';
-import { doc, updateDoc, collection, addDoc } from 'firebase/firestore';
+import { doc, updateDoc, collection, addDoc, getDoc, getDocs, query, where } from 'firebase/firestore';
 import { app, db, FCM_VAPID_KEY } from '../firebase';
 
 let messagingInstance: Messaging | null = null;
@@ -210,3 +210,143 @@ export const triggerMealPushNotification = async (params: {
     console.warn('Could not record mess_notifications in Firestore:', err);
   }
 };
+
+export interface TargetedMealPushResult {
+  totalMembers: number;
+  hasMealCount: number;
+  noMealCount: number;
+  dispatchedCount: number;
+  details: {
+    memberId: string;
+    memberName: string;
+    hasMeal: boolean;
+    meals: number;
+    title: string;
+    body: string;
+    token: string | null;
+  }[];
+}
+
+/**
+ * Iterates through all members of a mess, checks their meal record for today (or specified date),
+ * and dispatches targeted push notifications accordingly:
+ * - Users with meals today: "আপনার আজকের মিল যুক্ত করা হয়েছে।"
+ * - Users with NO meals today: "আপনার এখনো মিল দেওয়া হয় নি।"
+ */
+export const dispatchTargetedDailyMealNotifications = async (params: {
+  messId: string;
+  messName: string;
+  members: { id: string; name: string; email?: string; uid?: string }[];
+  todayDate: string;
+  mealsForDate: Record<string, { b: number; l: number; d: number } | undefined>;
+}): Promise<TargetedMealPushResult> => {
+  const { messId, messName, members, todayDate, mealsForDate } = params;
+
+  let hasMealCount = 0;
+  let noMealCount = 0;
+  let dispatchedCount = 0;
+  const details: TargetedMealPushResult['details'] = [];
+
+  for (const member of members) {
+    const slot = mealsForDate[member.id];
+    const totalMeals = slot ? (slot.b || 0) + (slot.l || 0) + (slot.d || 0) : 0;
+    const hasMeal = totalMeals > 0;
+
+    if (hasMeal) {
+      hasMealCount++;
+    } else {
+      noMealCount++;
+    }
+
+    const title = hasMeal
+      ? `🍽️ আজকের মিল আপডেট (${todayDate})`
+      : `⚠️ আজকের মিল সতর্কতা (${todayDate})`;
+
+    const body = hasMeal
+      ? `আপনার আজকের মিল যুক্ত করা হয়েছে। (মোট: ${totalMeals} টি মিল${slot ? ` - স: ${slot.b}, দু: ${slot.l}, রা: ${slot.d}` : ''})`
+      : `আপনার এখনো মিল দেওয়া হয় নি।`;
+
+    // Retrieve user FCM token from Firestore
+    let memberToken: string | null = null;
+    try {
+      if (member.uid) {
+        const uSnap = await getDoc(doc(db, 'users', member.uid));
+        if (uSnap.exists()) {
+          memberToken = (uSnap.data() as { fcmToken?: string }).fcmToken || null;
+        }
+      }
+      if (!memberToken && member.email) {
+        const qUsers = query(collection(db, 'users'), where('email', '==', member.email));
+        const uSnap = await getDocs(qUsers);
+        if (!uSnap.empty) {
+          memberToken = (uSnap.docs[0].data() as { fcmToken?: string }).fcmToken || null;
+        }
+      }
+    } catch (e) {
+      console.warn(`Could not fetch token for ${member.name}:`, e);
+    }
+
+    // 1. Record targeted alert in Firestore mess_notifications
+    try {
+      await addDoc(collection(db, 'mess_notifications'), {
+        messId,
+        messName,
+        targetMemberId: member.id,
+        targetMemberName: member.name,
+        targetEmail: member.email || null,
+        targetUid: member.uid || null,
+        targetToken: memberToken || null,
+        title,
+        body,
+        date: todayDate,
+        hasMeal,
+        totalMeals,
+        status: hasMeal ? 'meal_added' : 'no_meal',
+        createdAt: new Date().toISOString(),
+      });
+      dispatchedCount++;
+    } catch (err) {
+      console.warn('Could not record notification in Firestore:', err);
+    }
+
+    // 2. Trigger browser push on current device if permission is granted
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        if ('serviceWorker' in navigator) {
+          const reg = (await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js')) || (await navigator.serviceWorker.ready);
+          if (reg && reg.showNotification) {
+            await reg.showNotification(title, {
+              body,
+              icon: '/pwa-192x192.png',
+              badge: '/pwa-192x192.png',
+              tag: `targeted-${member.id}-${todayDate}`,
+              renotify: true,
+              data: { messId, date: todayDate, memberId: member.id, hasMeal },
+            } as NotificationOptions);
+          }
+        }
+      } catch (err) {
+        console.warn('Browser push display failed:', err);
+      }
+    }
+
+    details.push({
+      memberId: member.id,
+      memberName: member.name,
+      hasMeal,
+      meals: totalMeals,
+      title,
+      body,
+      token: memberToken,
+    });
+  }
+
+  return {
+    totalMembers: members.length,
+    hasMealCount,
+    noMealCount,
+    dispatchedCount,
+    details,
+  };
+};
+

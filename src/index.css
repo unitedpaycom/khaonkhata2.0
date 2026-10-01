@@ -340,7 +340,7 @@ main {
 .qa {
   display: flex;
   justify-content: space-around;
-  margin: 6px 0 18px;
+  margin: 6px 0 16px;
   gap: 6px;
 }
 

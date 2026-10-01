@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDocFromServer, initializeFirestore } from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 export const firebaseConfig = {
   apiKey: "AIzaSyBj025jce7qLDKGzwWecaOHkFBWe5s7tPc",
@@ -20,6 +21,8 @@ export const db = initializeFirestore(app, {
 });
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
+export const storage = getStorage(app);
+export { storageRef, uploadBytes, getDownloadURL };
 
 export enum OperationType {
   CREATE = 'create',
