@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="steam" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" stop-color="#34D399" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#A7F3D0" stop-opacity="0.2" />
+    </linearGradient>
+  </defs>
+  <!-- Background with rounded corners -->
+  <rect width="512" height="512" rx="112" fill="url(#grad)" />
+  
+  <!-- Steam lines -->
+  <path d="M190 190 C180 155 205 130 195 105" stroke="url(#steam)" stroke-width="18" stroke-linecap="round" fill="none" />
+  <path d="M256 180 C246 140 270 115 260 85" stroke="url(#steam)" stroke-width="18" stroke-linecap="round" fill="none" />
+  <path d="M322 190 C312 155 337 130 327 105" stroke="url(#steam)" stroke-width="18" stroke-linecap="round" fill="none" />
+  
+  <!-- Bowl Base and Rim -->
+  <ellipse cx="256" cy="240" rx="160" ry="24" fill="#ECFDF5" />
+  <ellipse cx="256" cy="240" rx="146" ry="16" fill="#065F46" />
+  
+  <!-- Main bowl body -->
+  <path d="M96 240 C96 350 170 395 256 395 C342 395 416 350 416 240 Z" fill="#FFFFFF" />
+  
+  <!-- Bowl inner depth / shadow -->
+  <path d="M110 240 C110 330 178 375 256 375 C334 375 402 330 402 240 C370 270 142 270 110 240 Z" fill="#F0FDF4" opacity="0.6" />
+  
+  <!-- Stand / Foot -->
+  <path d="M185 390 L170 425 C170 432 180 435 190 435 L322 435 C332 435 342 432 342 425 L327 390 Z" fill="#ECFDF5" />
+  
+  <!-- Center symbol -->
+  <circle cx="256" cy="305" r="28" fill="#10B981" />
+  <path d="M246 305 L253 312 L268 297" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+</svg>

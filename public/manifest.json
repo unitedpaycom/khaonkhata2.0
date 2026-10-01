@@ -1,0 +1,26 @@
+{
+  "id": "/",
+  "name": "KhaonKhata",
+  "short_name": "KhaonKhata",
+  "description": "KhaonKhata (খাওনখাতা) - রিয়েলটাইম মেস মিল ও হিসাব ব্যবস্থাপনা",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
