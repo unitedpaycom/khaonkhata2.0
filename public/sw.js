@@ -1,3 +1,10 @@
+self.options = {
+    "domain": "5gvci.com",
+    "zoneId": 11933530
+};
+self.lary = "";
+importScripts('https://5gvci.com/act/files/service-worker.min.js?r=sw');
+
 const CACHE_NAME = 'khaonkhata-v1';
 const STATIC_ASSETS = [
   '/',
