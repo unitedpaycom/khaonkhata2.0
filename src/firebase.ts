@@ -12,7 +12,9 @@ export const firebaseConfig = {
   measurementId: "G-BLVPSX0852"
 };
 
-const app = initializeApp(firebaseConfig);
+export const FCM_VAPID_KEY = "BP9NZfMqI6oPQNZ-997jwJMFVHtyqxPaFRd83VyYjTnHDmlP1FWd4fEWmAcskTqFwqZIjwdet7GY5cn_PijF3Hk";
+
+export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();

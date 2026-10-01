@@ -84,4 +84,6 @@ export interface UserProfile {
   photoURL?: string;
   currentMessId?: string;
   joinedMesses?: string[];
+  fcmToken?: string;
+  fcmUpdatedAt?: string;
 }

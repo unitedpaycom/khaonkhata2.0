@@ -35,5 +35,10 @@ service cloud.firestore {
         resource.data.mgrEmail == request.auth.token.email
       );
     }
+
+    // Mess Notifications
+    match /mess_notifications/{notificationId} {
+      allow read, create: if isSignedIn();
+    }
   }
 }

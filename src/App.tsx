@@ -47,6 +47,11 @@ import { Modal, ModalField } from './components/Modal';
 import { Toast } from './components/Toast';
 import { AddMemberModal } from './components/AddMemberModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
+import {
+  requestFcmPermissionAndGetToken,
+  setupFcmForegroundListener,
+  triggerMealPushNotification,
+} from './utils/fcm';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -152,6 +157,13 @@ export default function App() {
             await setDoc(userDocRef, newProfile);
             setProfile(newProfile);
           }
+
+          // Request notification permission and register FCM device token
+          requestFcmPermissionAndGetToken(currentUser.uid).then((token) => {
+            if (token) {
+              setProfile((prev) => (prev ? { ...prev, fcmToken: token } : null));
+            }
+          });
         } catch (err) {
           handleFirestoreError(err, OperationType.GET, 'users/' + currentUser.uid);
         }
@@ -163,6 +175,14 @@ export default function App() {
 
     return () => unsub();
   }, []);
+
+  // Setup FCM Foreground Push Notification Listener
+  useEffect(() => {
+    if (!user) return;
+    setupFcmForegroundListener((payload) => {
+      showToast(`🔔 ${payload.title}: ${payload.body}`);
+    });
+  }, [user]);
 
   // Listen to real-time User's Mess list
   useEffect(() => {
@@ -681,6 +701,34 @@ export default function App() {
     };
 
     saveStateToFirestore(nextState, 'মিল সেভ হয়েছে!');
+
+    // Trigger push notification for members whose meal was added or updated
+    messState.members.forEach((m) => {
+      const draft = mealDraft[m.id];
+      const prevSlot = messState.meals[mealDate]?.[m.id];
+      const hadPrev = prevSlot && mt(prevSlot) > 0;
+      const hasNow = draft && mt(draft) > 0;
+
+      if (hasNow || hadPrev) {
+        const isChanged =
+          !prevSlot ||
+          prevSlot.b !== (draft?.b || 0) ||
+          prevSlot.l !== (draft?.l || 0) ||
+          prevSlot.d !== (draft?.d || 0);
+
+        if (isChanged) {
+          triggerMealPushNotification({
+            messId: messState.id,
+            messName: messState.mess,
+            memberName: m.name,
+            date: mealDate,
+            action: hadPrev ? 'updated' : 'added',
+            slotDetails: draft ? { b: draft.b, l: draft.l, d: draft.d } : { b: 0, l: 0, d: 0 },
+            totalMeals: draft ? mt(draft) : 0,
+          });
+        }
+      }
+    });
   };
 
   // Submit Meal Request (Members)
@@ -744,6 +792,18 @@ export default function App() {
     };
 
     saveStateToFirestore(nextState, 'রিকোয়েস্ট অ্যাপ্রুভ হয়েছে');
+
+    // Trigger push notification for approved meal request
+    const targetMember = messState.members.find((m) => m.id === target.m);
+    triggerMealPushNotification({
+      messId: messState.id,
+      messName: messState.mess,
+      memberName: targetMember?.name || 'সদস্য',
+      date: target.date,
+      action: 'approved',
+      slotDetails: { b: target.b, l: target.l, d: target.d },
+      totalMeals: target.b + target.l + target.d,
+    });
   };
 
   // Reject Meal Request
@@ -2718,6 +2778,66 @@ export default function App() {
                   }}
                 >
                   + Create / Join Another Mess
+                </button>
+              </div>
+            </div>
+
+            {/* FCM Notifications Card */}
+            <div className="card space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="flex items-center gap-1.5 text-base">
+                    <span>🔔 পুশ নোটিফিকেশন (FCM)</span>
+                  </h3>
+                  <p className="text-xs text-[var(--mut)] mt-0.5">
+                    {profile?.fcmToken
+                      ? 'ডিভাইস টোকেন নিবন্ধিত আছে'
+                      : 'মিল ও মেসের রিয়েলটাইম অ্যালার্ট পেতে অনুমোদন করুন'}
+                  </p>
+                </div>
+                <span className={`tag text-xs font-semibold ${profile?.fcmToken ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40' : 'text-amber-600'}`}>
+                  {profile?.fcmToken ? 'সক্রিয়' : 'নিষ্ক্রিয়'}
+                </span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  className="btn g s flex-1 text-xs"
+                  onClick={async () => {
+                    if (!user) return;
+                    showToast('নোটিফিকেশন পারমিশন ও টোকেন রিকোয়েস্ট করা হচ্ছে...');
+                    const token = await requestFcmPermissionAndGetToken(user.uid);
+                    if (token) {
+                      setProfile((prev) => (prev ? { ...prev, fcmToken: token } : null));
+                      showToast('✅ নোটিফিকেশন টোকেন সফলভাবে সেভ হয়েছে!');
+                    } else {
+                      showToast('ব্রাউজারের পারমিশন সেটিংস থেকে Notification এলাউ করুন');
+                    }
+                  }}
+                >
+                  {profile?.fcmToken ? '🔄 টোকেন রিফ্রেশ করুন' : '🔔 নোটিফিকেশন চালু করুন'}
+                </button>
+
+                <button
+                  className="btn d s text-xs"
+                  onClick={() => {
+                    if (!messState) {
+                      showToast('একটি মেসে যুক্ত থাকুন');
+                      return;
+                    }
+                    triggerMealPushNotification({
+                      messId: messState.id,
+                      messName: messState.mess,
+                      memberName: whoName,
+                      date: TD,
+                      action: 'updated',
+                      slotDetails: { b: 1, l: 1, d: 1 },
+                      totalMeals: 3,
+                    });
+                    showToast('টেস্ট পুশ নোটিফিকেশন পাঠানো হয়েছে!');
+                  }}
+                >
+                  টেস্ট পুশ পাঠান
                 </button>
               </div>
             </div>
