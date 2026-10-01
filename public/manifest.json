@@ -2,7 +2,7 @@
   "id": "/",
   "name": "KhaonKhata",
   "short_name": "KhaonKhata",
-  "description": "KhaonKhata (খাওনখাতা) - রিয়েলটাইম মেস মিল ও হিসাব ব্যবস্থাপনা",
+  "description": "KhaonKhata - রিয়েলটাইম মেস মিল ও হিসাব ব্যবস্থাপনা",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
