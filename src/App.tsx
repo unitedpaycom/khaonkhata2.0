@@ -43,7 +43,6 @@ import {
   fm,
   mt,
   calcMonth,
-  seedDemoData,
 } from './utils/calc';
 import { Icon, GoogleIcon, FacebookIcon } from './components/Icons';
 import { Modal, ModalField } from './components/Modal';
@@ -115,7 +114,6 @@ export default function App() {
   // Gate view mode
   const [gateMode, setGateMode] = useState<'choose' | 'create' | 'join'>('choose');
   const [createMessName, setCreateMessName] = useState('');
-  const [createWithDemo, setCreateWithDemo] = useState(true);
   const [joinEmailOrId, setJoinEmailOrId] = useState('');
 
   // Toast
@@ -549,52 +547,6 @@ export default function App() {
     setActiveYM(ds(nextDate).slice(0, 7));
   };
 
-  // Demo Login Handler (Fall back when domain is not authorized in Firebase Console)
-  const handleDemoLogin = async () => {
-    const demoUser = {
-      uid: 'demo_user_manager',
-      displayName: 'রেদোয়ান আহমেদ (ম্যানেজার)',
-      email: 'redueanahamedrahat@gmail.com',
-      photoURL: '',
-      emailVerified: true,
-      isAnonymous: false,
-    } as unknown as User;
-
-    setUser(demoUser);
-    setUnauthorizedDomainModal(false);
-    showToast('স্বাগতম, রেদোয়ান আহমেদ (ম্যানেজার)');
-
-    try {
-      const userDocRef = doc(db, 'users', demoUser.uid);
-      const snap = await getDoc(userDocRef);
-      if (snap.exists()) {
-        const data = snap.data() as UserProfile;
-        setProfile(data);
-        if (data.currentMessId && !currentMessId) {
-          setCurrentMessId(data.currentMessId);
-          localStorage.setItem('mm_cur_mess_id', data.currentMessId);
-        }
-      } else {
-        const newProfile: UserProfile = {
-          uid: demoUser.uid,
-          name: demoUser.displayName || 'ম্যানেজার',
-          email: demoUser.email || '',
-          joinedMesses: [],
-        };
-        await setDoc(userDocRef, newProfile);
-        setProfile(newProfile);
-      }
-    } catch (e) {
-      console.warn('Demo profile setup note:', e);
-      setProfile({
-        uid: demoUser.uid,
-        name: demoUser.displayName || 'ম্যানেজার',
-        email: demoUser.email || '',
-        joinedMesses: [],
-      });
-    }
-  };
-
   // Google Sign-in Handler
   const handleGoogleSignIn = async () => {
     try {
@@ -638,48 +590,41 @@ export default function App() {
     if (!user) return;
     const name = createMessName.trim() || 'My Mess';
     const messId = 'mess_' + uid();
-    let newState: MessState;
-
-    if (createWithDemo) {
-      newState = seedDemoData(name, user.displayName || 'ম্যানেজার', user.email || '', user.uid);
-      newState.id = messId;
-    } else {
-      const m0Id = 'm0';
-      newState = {
-        id: messId,
-        mess: name,
-        mgr: m0Id,
-        mgrUid: user.uid,
-        mgrEmail: user.email || '',
-        members: [
-          {
-            id: m0Id,
-            uid: user.uid,
-            name: user.displayName || 'ম্যানেজার',
-            email: user.email || '',
-            phone: '',
-            room: 'Room 101',
-            join: TD,
-          },
-        ],
-        deposits: [],
-        bazar: [],
-        meals: {},
-        reqs: [],
-        notices: [
-          {
-            id: uid(),
-            text: `মেস "${name}" তৈরি হয়েছে। সদস্যদের যোগ করুন বা মেস কোড শেয়ার করুন।`,
-            date: TD,
-          },
-        ],
-        other: [],
-        cutoff: 21,
-        closed: {},
-        theme: 'light',
-        updatedAt: new Date().toISOString(),
-      };
-    }
+    const m0Id = 'm0';
+    const newState: MessState = {
+      id: messId,
+      mess: name,
+      mgr: m0Id,
+      mgrUid: user.uid,
+      mgrEmail: user.email || '',
+      members: [
+        {
+          id: m0Id,
+          uid: user.uid,
+          name: user.displayName || 'ম্যানেজার',
+          email: user.email || '',
+          phone: '',
+          room: 'Room 101',
+          join: TD,
+        },
+      ],
+      deposits: [],
+      bazar: [],
+      meals: {},
+      reqs: [],
+      notices: [
+        {
+          id: uid(),
+          text: `মেস "${name}" তৈরি হয়েছে। সদস্যদের যোগ করুন বা মেস কোড শেয়ার করুন।`,
+          date: TD,
+        },
+      ],
+      other: [],
+      cutoff: 21,
+      closed: {},
+      theme: 'light',
+      updatedAt: new Date().toISOString(),
+    };
 
     try {
       await setDoc(doc(db, 'messes', messId), newState);
@@ -1393,22 +1338,6 @@ export default function App() {
             <span>Google দিয়ে চালিয়ে যান</span>
           </button>
 
-          <div className="relative my-4">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-[var(--line)]"></div>
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-[var(--card)] px-2 text-[var(--mut)]">অথবা</span>
-            </div>
-          </div>
-
-          <button
-            onClick={handleDemoLogin}
-            className="w-full py-3 px-6 rounded-2xl bg-[var(--line)] hover:bg-[var(--line)]/80 text-[var(--fg)] font-semibold border border-[var(--line)] flex items-center justify-center gap-2 transition-all cursor-pointer text-sm"
-          >
-            <span>👤 সরাসরি ডেমো / টেস্ট মোডে প্রবেশ করুন</span>
-          </button>
-
           <div className="mt-8 pt-6 border-t border-[var(--line)] text-center text-xs text-[var(--mut)] space-y-1">
             <p>✓ তাৎক্ষণিক রিয়েলটাইম সিঙ্ক (Firestore)</p>
             <p>✓ প্রতিদিনের মিল চার্ট, বাজার খরচ ও জমা</p>
@@ -1468,18 +1397,12 @@ export default function App() {
                 </ol>
               </div>
 
-              <div className="space-y-2 pt-2">
+              <div className="pt-2">
                 <button
                   className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 w-full cursor-pointer text-sm font-semibold"
-                  onClick={handleDemoLogin}
-                >
-                  🚀 ডেমো ম্যানেজার হিসেবে এখনই প্রবেশ করুন
-                </button>
-                <button
-                  className="btn g s w-full cursor-pointer text-xs"
                   onClick={() => setUnauthorizedDomainModal(false)}
                 >
-                  বন্ধ করুন
+                  ঠিক আছে (বন্ধ করুন)
                 </button>
               </div>
             </div>
@@ -1573,16 +1496,6 @@ export default function App() {
                 value={createMessName}
                 onChange={e => setCreateMessName(e.target.value)}
               />
-
-              <label className="flex items-center gap-2 mt-4 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={createWithDemo}
-                  onChange={e => setCreateWithDemo(e.target.checked)}
-                  className="w-5 h-5 !shadow-none !border-[var(--line)] cursor-pointer"
-                />
-                <span className="text-sm">ডেমো সদস্য ও মিল ডাটা সহ শুরু করুন (পরবর্তীতে এডিটযোগ্য)</span>
-              </label>
 
               <p className="mt-6">
                 <button
