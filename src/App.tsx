@@ -65,11 +65,28 @@ import {
   dispatchTargetedDailyMealNotifications,
   TargetedMealPushResult,
 } from './utils/fcm';
+import {
+  saveCachedMessState,
+  getCachedMessState,
+  enqueueOfflineAction,
+  getOfflineQueue,
+  syncOfflineQueueToFirestore,
+} from './utils/offlineSync';
+import {
+  downloadIndividualReportPDF,
+  downloadGroupReportPDF,
+} from './utils/pdfExport';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  // Offline Persistence & Auto-Sync State
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [pendingSyncCount, setPendingSyncCount] = useState<number>(0);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isExportingPDF, setIsExportingPDF] = useState<boolean>(false);
 
   // Mess State
   const [currentMessId, setCurrentMessId] = useState<string>(() => {
@@ -433,12 +450,61 @@ export default function App() {
     fetchUserMesses();
   }, [user, profile]);
 
-  // Real-time listener for currentMessId
+  // Refresh pending offline sync count
+  const refreshPendingSyncCount = async () => {
+    try {
+      const queue = await getOfflineQueue();
+      setPendingSyncCount(queue.length);
+    } catch {
+      setPendingSyncCount(0);
+    }
+  };
+
+  // Online / Offline listener & Auto-Sync
+  useEffect(() => {
+    const handleOnline = async () => {
+      setIsOnline(true);
+      try {
+        const { syncedCount, error } = await syncOfflineQueueToFirestore();
+        await refreshPendingSyncCount();
+        if (syncedCount > 0 && !error) {
+          showToast('Back online - Data synced successfully!');
+        }
+      } catch (err) {
+        console.error('Auto-sync error:', err);
+      }
+    };
+
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast('Offline Mode - Changes saved locally');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    refreshPendingSyncCount();
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Real-time listener for currentMessId with instant offline cache loading
   useEffect(() => {
     if (!currentMessId || !user) {
       setMessState(null);
       return;
     }
+
+    // Instantly try reading from offline storage first
+    getCachedMessState(currentMessId).then((cached) => {
+      if (cached) {
+        setMessState((prev) => prev || cached);
+        setMessLoading(false);
+      }
+    });
 
     setMessLoading(true);
     const messDocRef = doc(db, 'messes', currentMessId);
@@ -460,6 +526,7 @@ export default function App() {
           data.closed = data.closed || {};
           data.cutoff = data.cutoff ?? 21;
           setMessState(data);
+          saveCachedMessState(data);
         } else {
           showToast('মেসটি পাওয়া যায়নি বা মুছে ফেলা হয়েছে');
           setMessState(null);
@@ -467,9 +534,14 @@ export default function App() {
           localStorage.removeItem('mm_cur_mess_id');
         }
       },
-      (error) => {
+      async (error) => {
         setMessLoading(false);
-        handleFirestoreError(error, OperationType.GET, 'messes/' + currentMessId);
+        const cached = await getCachedMessState(currentMessId);
+        if (cached) {
+          setMessState(cached);
+        } else {
+          handleFirestoreError(error, OperationType.GET, 'messes/' + currentMessId);
+        }
       }
     );
 
@@ -522,19 +594,122 @@ export default function App() {
     return val;
   };
 
-  // Save updated messState to Firestore (triggers real-time onSnapshot for everyone!)
+  // Save updated messState to Firestore or Offline Storage with Auto-Sync
   const saveStateToFirestore = async (newState: MessState, successMsg?: string) => {
     if (!newState.id) return;
+
+    // Immediately update React state for instant optimistic UI response
+    setMessState(newState);
+
+    if (!navigator.onLine) {
+      // Offline mode: save locally to IndexedDB & queue action
+      await saveCachedMessState(newState);
+      await enqueueOfflineAction({
+        id: uid(),
+        messId: newState.id,
+        actionType: 'save_state',
+        description: successMsg || 'অফলাইন পরিবর্তন',
+        state: newState,
+        timestamp: Date.now(),
+      });
+      await refreshPendingSyncCount();
+      showToast('Offline Mode - Changes saved locally');
+      return;
+    }
+
     try {
       newState.updatedAt = new Date().toISOString();
       const sanitized = cleanUndefined(newState);
       const messDocRef = doc(db, 'messes', newState.id);
       await setDoc(messDocRef, sanitized, { merge: true });
+      await saveCachedMessState(newState);
       if (successMsg) showToast(successMsg);
     } catch (err) {
-      console.error('saveStateToFirestore error:', err);
-      handleFirestoreError(err, OperationType.WRITE, 'messes/' + newState.id);
-      showToast('সেভ করতে সমস্যা হয়েছে');
+      console.warn('saveStateToFirestore online write failed, saving locally:', err);
+      await saveCachedMessState(newState);
+      await enqueueOfflineAction({
+        id: uid(),
+        messId: newState.id,
+        actionType: 'save_state',
+        description: successMsg || 'অফলাইন পরিবর্তন',
+        state: newState,
+        timestamp: Date.now(),
+      });
+      await refreshPendingSyncCount();
+      showToast('Offline Mode - Changes saved locally');
+    }
+  };
+
+  // Manual Trigger to Sync Queued Offline Actions
+  const handleManualSync = async () => {
+    if (!navigator.onLine) {
+      showToast('Offline Mode - Changes saved locally');
+      return;
+    }
+    setIsSyncing(true);
+    try {
+      const { syncedCount, error } = await syncOfflineQueueToFirestore();
+      await refreshPendingSyncCount();
+      if (error) {
+        showToast('সিঙ্ক করতে কিছু ত্রুটি হয়েছে');
+      } else if (syncedCount > 0) {
+        showToast('Back online - Data synced successfully!');
+      } else {
+        showToast('সব ডাটা ইতোমধ্যে সিঙ্ক করা আছে');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('সিঙ্ক ব্যর্থ হয়েছে');
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Export Individual Monthly Expense & Meal Summary PDF
+  const handleDownloadIndividualPDF = async (targetMember?: Member) => {
+    const mem = targetMember || currentMember;
+    if (!mem || !messState || !monthSummary) {
+      showToast('মেম্বার বা মাসের হিসাব পাওয়া যায়নি');
+      return;
+    }
+    setIsExportingPDF(true);
+    showToast('পিডিএফ তৈরি হচ্ছে, অনুগ্রহ করে অপেক্ষা করুন...');
+    try {
+      await downloadIndividualReportPDF({
+        member: mem,
+        messState,
+        ym: activeYM,
+        summary: monthSummary,
+      });
+      showToast('ব্যক্তিগত PDF রিপোর্ট ডাউনলোড সম্পন্ন!');
+    } catch (err) {
+      console.error('Individual PDF export error:', err);
+      showToast('PDF ডাউনলোড ব্যর্থ হয়েছে');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
+  // Export Group Mess Summary Report PDF
+  const handleDownloadGroupPDF = async () => {
+    if (!messState || !monthSummary) {
+      showToast('মেস বা মাসের হিসাব পাওয়া যায়নি');
+      return;
+    }
+    setIsExportingPDF(true);
+    showToast('সম্পূর্ণ মেস PDF রিপোর্ট প্রস্তুত হচ্ছে...');
+    try {
+      await downloadGroupReportPDF({
+        messState,
+        ym: activeYM,
+        summary: monthSummary,
+      });
+      showToast('মেস সামারি PDF রিপোর্ট ডাউনলোড সম্পন্ন!');
+    } catch (err) {
+      console.error('Group PDF export error:', err);
+      showToast('মেস PDF ডাউনলোড ব্যর্থ হয়েছে');
+    } finally {
+      setIsExportingPDF(false);
     }
   };
 
@@ -1890,13 +2065,42 @@ export default function App() {
           </button>
         </div>
 
-        {/* Live Status indicator */}
-        <div className="flex items-center justify-between text-xs text-[var(--mut)] mb-3 px-1">
-          <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            রিয়েলটাইম সিঙ্ক সক্রিয়
-          </span>
-          <span>মেস: <b>{messState.mess}</b> ({isManager ? 'ম্যানেজার' : 'সদস্য'})</span>
+        {/* Live Status indicator & Offline Banner */}
+        <div className="flex flex-col gap-1.5 mb-3 px-1">
+          <div className="flex items-center justify-between text-xs text-[var(--mut)]">
+            {isOnline ? (
+              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                অনলাইন · রিয়েলটাইম সিঙ্ক সক্রিয়
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                অফলাইন মোড (Offline Mode) · লোকাল ডাটা
+              </span>
+            )}
+            <span>মেস: <b>{messState.mess}</b> ({isManager ? 'ম্যানেজার' : 'সদস্য'})</span>
+          </div>
+
+          {/* Pending Offline Sync Notice Bar */}
+          {pendingSyncCount > 0 && (
+            <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-xs">
+              <span className="flex items-center gap-2">
+                <span>🔄</span>
+                <span><b>{pendingSyncCount}টি</b> পরিবর্তন অফলাইনে সংরক্ষিত আছে (অনলাইন হলে অটো-সিঙ্ক হবে)</span>
+              </span>
+              {isOnline && (
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={isSyncing}
+                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-[11px] cursor-pointer transition disabled:opacity-50"
+                >
+                  {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'এখনই সিঙ্ক করুন'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* --- VIEW: ABOUT US --- */}
@@ -1930,10 +2134,24 @@ export default function App() {
             </div>
 
             {/* Mess Hero Balance Card */}
-            <div className="hero2">
-              <small>Mess Balance</small>
-              <div className="big">
-                {monthSummary ? tk(monthSummary.dep - monthSummary.tot) : '৳0'}
+            <div className="hero2 relative overflow-hidden">
+              <div className="flex justify-between items-start">
+                <div>
+                  <small>Mess Balance</small>
+                  <div className="big">
+                    {monthSummary ? tk(monthSummary.dep - monthSummary.tot) : '৳0'}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-semibold text-xs flex items-center gap-1.5 backdrop-blur-xs transition cursor-pointer border border-white/20 shadow-xs"
+                  disabled={isExportingPDF}
+                  onClick={handleDownloadGroupPDF}
+                  title="Download Group Mess Summary Report PDF"
+                >
+                  <span>📋</span>
+                  <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'Group PDF'}</span>
+                </button>
               </div>
               <div className="tri">
                 <div>
@@ -1953,7 +2171,19 @@ export default function App() {
 
             {/* My Personal Summary */}
             <div className="card">
-              <h3>My Summary</h3>
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="!mb-0">My Summary</h3>
+                <button
+                  type="button"
+                  className="btn g s flex items-center gap-1.5 text-xs font-semibold !py-1 !px-2.5 cursor-pointer"
+                  disabled={isExportingPDF}
+                  onClick={() => handleDownloadIndividualPDF()}
+                  title="Download Individual Monthly Expense & Meal Summary PDF"
+                >
+                  <span>📄</span>
+                  <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'My Report PDF'}</span>
+                </button>
+              </div>
               <div className="fig">
                 <div>
                   <b>{fm(mySummary.meals)}</b>
@@ -3036,8 +3266,19 @@ export default function App() {
                       </div>
                     </div>
 
-                    {isManager && (
-                      <div className="acts !justify-start mt-4">
+                    <div className="acts !justify-between items-center mt-4 pt-3 border-t border-[var(--line)]">
+                      <button
+                        type="button"
+                        className="btn !bg-emerald-600 !text-white hover:!bg-emerald-700 s flex items-center gap-1.5 cursor-pointer font-semibold shadow-xs"
+                        disabled={isExportingPDF}
+                        onClick={() => handleDownloadIndividualPDF(mem)}
+                        title="Download Individual Monthly Expense & Meal Summary PDF"
+                      >
+                        <span>📄</span>
+                        <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'মাসিক হিসাব PDF ডাউনলোড'}</span>
+                      </button>
+
+                      {isManager && (
                         <button
                           className="btn g s"
                           onClick={() => {
@@ -3095,8 +3336,8 @@ export default function App() {
                         >
                           Edit / Remove Member
                         </button>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   {/* Month Calculation Breakdown */}
@@ -3244,12 +3485,45 @@ export default function App() {
               </table>
             </div>
 
-            <button
-              className="btn"
-              onClick={() => window.print()}
-            >
-              রিপোর্ট প্রিন্ট / PDF
-            </button>
+            {/* Export and Print Options */}
+            <div className="card space-y-3">
+              <div>
+                <h3 className="!mb-1">অফিসিয়াল PDF রিপোর্ট ও প্রিন্ট</h3>
+                <p className="text-xs text-[var(--mut)]">
+                  সম্পূর্ণ মেসের ওভারভিউ টেবিল অথবা আপনার ব্যক্তিগত খরচের হিসাব সরাসরি ডিভাইসে PDF ডাউনলোড করুন
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 flex items-center justify-center gap-2 font-bold cursor-pointer shadow-xs"
+                  disabled={isExportingPDF}
+                  onClick={handleDownloadGroupPDF}
+                  title="Download Group Mess Summary Report PDF"
+                >
+                  <span>📋</span>
+                  <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'Group Mess Summary Report (PDF)'}</span>
+                </button>
+                <button
+                  type="button"
+                  className="btn big g flex items-center justify-center gap-2 font-bold cursor-pointer"
+                  disabled={isExportingPDF}
+                  onClick={() => handleDownloadIndividualPDF()}
+                  title="Download Individual Monthly Expense & Meal Summary PDF"
+                >
+                  <span>👤</span>
+                  <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'My Individual Summary (PDF)'}</span>
+                </button>
+              </div>
+              <button
+                type="button"
+                className="btn g s w-full flex items-center justify-center gap-1.5 cursor-pointer text-xs"
+                onClick={() => window.print()}
+              >
+                <span>🖨️</span>
+                <span>ব্রাউজার প্রিন্ট ভিউ (Print View)</span>
+              </button>
+            </div>
           </div>
         )}
 
@@ -3530,6 +3804,44 @@ export default function App() {
                 >
                   + Create / Join Another Mess
                 </button>
+              </div>
+            </div>
+
+            {/* Monthly Reports & Statements (PDF) */}
+            <div className="card space-y-3">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-base !mb-1">
+                  <span>📄 মাসিক হিসাব ও PDF স্টেটমেন্ট</span>
+                </h3>
+                <p className="text-xs text-[var(--mut)]">
+                  বর্তমান মাসের ({banglaMonths[+activeMonthNum - 1]} {activeYear}) ব্যক্তিগত খরচ ও মিলের অফিশিয়াল PDF ডাউনলোড করুন
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button
+                  type="button"
+                  className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 flex-1 flex items-center justify-center gap-2 text-sm font-semibold cursor-pointer shadow-xs"
+                  disabled={isExportingPDF}
+                  onClick={() => handleDownloadIndividualPDF()}
+                  title="Download Individual Monthly Expense & Meal Summary PDF"
+                >
+                  <span>👤</span>
+                  <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'আমার ব্যক্তিগত PDF রিপোর্ট'}</span>
+                </button>
+
+                {isManager && (
+                  <button
+                    type="button"
+                    className="btn big g flex-1 flex items-center justify-center gap-2 text-sm font-semibold cursor-pointer"
+                    disabled={isExportingPDF}
+                    onClick={handleDownloadGroupPDF}
+                    title="Download Group Mess Summary Report PDF"
+                  >
+                    <span>📋</span>
+                    <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'গ্রুপ মেস সামারি PDF'}</span>
+                  </button>
+                )}
               </div>
             </div>
 

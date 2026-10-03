@@ -42,19 +42,6 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', function() {
-          navigator.serviceWorker.getRegistrations().then(function(registrations) {
-            for (let reg of registrations) {
-              if (reg.active && reg.active.scriptURL && reg.active.scriptURL.endsWith('/sw.js')) {
-                reg.unregister();
-              }
-            }
-          });
-        });
-      }
-    </script>
   </body>
 </html>
 
