@@ -1,32 +1,8 @@
 import type { Request, Response } from 'express';
 import { Resend } from 'resend';
+import type { EmailPayload } from '../src/types';
 
-export interface EmailPayload {
-  type: 'meal_update' | 'deposit_confirmation';
-  to: string;
-  memberName: string;
-  messName: string;
-  appUrl?: string;
-  data: {
-    // Meal data
-    date?: string;
-    breakfast?: number;
-    lunch?: number;
-    dinner?: number;
-    totalMeals?: number;
-    action?: 'added' | 'updated' | 'requested' | 'approved';
-    updatedBy?: string;
-
-    // Deposit data
-    amount?: number;
-    depositDate?: string;
-    method?: string;
-    senderNumber?: string;
-    trxId?: string;
-    note?: string;
-    status?: string;
-  };
-}
+export type { EmailPayload };
 
 // Generate HTML email for Meal Status Update
 function generateMealHtml(payload: EmailPayload, targetAppUrl: string): { subject: string; html: string } {

@@ -147,3 +147,41 @@ export interface UserProfile {
   fcmToken?: string;
   fcmUpdatedAt?: string;
 }
+
+export interface EmailPayload {
+  type: 'meal_update' | 'deposit_confirmation';
+  to: string;
+  memberName: string;
+  messName: string;
+  appUrl?: string;
+  data: {
+    // Meal data
+    date?: string;
+    breakfast?: number;
+    lunch?: number;
+    dinner?: number;
+    totalMeals?: number;
+    action?: 'added' | 'updated' | 'requested' | 'approved';
+    updatedBy?: string;
+
+    // Deposit data
+    amount?: number;
+    depositDate?: string;
+    method?: string;
+    senderNumber?: string;
+    trxId?: string;
+    note?: string;
+    status?: string;
+  };
+}
+
+declare global {
+  interface Window {
+    KhaonKhataAuth?: {
+      signInWithGoogle: () => Promise<void>;
+      signInWithEmail: (args: { email: string; password: string; remember?: boolean }) => Promise<void>;
+      signUpWithEmail: (args: { name: string; email: string; password: string }) => Promise<void>;
+      resetPassword: (email: string) => Promise<void>;
+    };
+  }
+}

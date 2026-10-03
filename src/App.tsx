@@ -80,11 +80,40 @@ import {
   sendMealConfirmationEmail,
   sendDepositConfirmationEmail,
 } from './utils/emailClient';
+import { LandingPage } from './components/LandingPage';
+import { LoginPage } from './components/LoginPage';
+import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
+import { TermsPage } from './components/TermsPage';
+import { ContactPage } from './components/ContactPage';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+
+  // Browser Route State for SEO, AdSense Compliance & Landing Navigation
+  const [pathname, setPathname] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname || '/';
+    }
+    return '/';
+  });
+
+  const navigate = (path: string) => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', path);
+    }
+    setPathname(path);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    const handlePop = () => {
+      setPathname(window.location.pathname || '/');
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []);
 
   // Offline Persistence & Auto-Sync State
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -759,6 +788,7 @@ export default function App() {
       const res = await signInWithPopup(auth, googleProvider);
       if (res.user) {
         showToast(`স্বাগতম, ${res.user.displayName || 'ব্যবহারকারী'}`);
+        navigate('/app');
       }
     } catch (err: unknown) {
       console.error('Google sign-in error:', err);
@@ -782,12 +812,14 @@ export default function App() {
       localStorage.removeItem('mm_cur_mess_id');
       setMessState(null);
       showToast('লগআউট সম্পন্ন হয়েছে');
+      navigate('/');
     } catch (err) {
       console.error('Sign-out error:', err);
       setUser(null);
       setCurrentMessId('');
       localStorage.removeItem('mm_cur_mess_id');
       setMessState(null);
+      navigate('/');
     }
   };
 
@@ -1579,8 +1611,8 @@ export default function App() {
   }, [activeYear, activeMonthNum, activeYM]);
 
   // Full-Screen Loading Animation:
-  // Shows while verifying session (authLoading) OR while loading the active mess data for logged-in user
-  const isCheckingSessionOrMess = authLoading || (!!user && !!currentMessId && !messState);
+  // Shows while verifying session (authLoading) when trying to access /app
+  const isCheckingSessionOrMess = authLoading && (pathname === '/app' || (pathname === '/login' && !!user));
 
   if (isCheckingSessionOrMess) {
     return (
@@ -1614,16 +1646,59 @@ export default function App() {
     );
   }
 
-  // Public /about route accessible even when not logged in
-  if (tab === 'about' && !user) {
+  // --- DEDICATED ROUTE: PRIVACY POLICY (/privacy) ---
+  if (pathname === '/privacy') {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <PrivacyPolicyPage
+          onBack={() => navigate('/')}
+          onNavigate={(p) => navigate(p)}
+        />
+        <Toast message={toastMsg} />
+      </div>
+    );
+  }
+
+  // --- DEDICATED ROUTE: TERMS OF SERVICE (/terms) ---
+  if (pathname === '/terms') {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <TermsPage
+          onBack={() => navigate('/')}
+          onNavigate={(p) => navigate(p)}
+        />
+        <Toast message={toastMsg} />
+      </div>
+    );
+  }
+
+  // --- DEDICATED ROUTE: CONTACT US (/contact) ---
+  if (pathname === '/contact') {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <ContactPage
+          onBack={() => navigate('/')}
+          showToast={showToast}
+        />
+        <Toast message={toastMsg} />
+      </div>
+    );
+  }
+
+  // --- DEDICATED ROUTE: ABOUT US (/about) ---
+  if (pathname === '/about' || (tab === 'about' && pathname !== '/app')) {
     return (
       <div className="min-h-screen bg-[var(--bg)]">
         <AboutPage
           standalone
-          onLogin={handleGoogleSignIn}
+          onLogin={() => navigate('/login')}
           onBack={() => {
-            setTab('home');
-            window.history.pushState({}, '', '/');
+            if (user && currentMessId && messState) {
+              navigate('/app');
+              setTab('home');
+            } else {
+              navigate('/');
+            }
           }}
         />
         <Toast message={toastMsg} />
@@ -1631,112 +1706,60 @@ export default function App() {
     );
   }
 
-  // Not signed in: Show Direct Google Login Screen
+  // --- DEDICATED ROUTE: LOGIN (/login) ---
+  if (pathname === '/login') {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <LoginPage
+          onGoogleSignIn={handleGoogleSignIn}
+          onBackToHome={() => navigate('/')}
+          unauthorizedDomainModal={unauthorizedDomainModal}
+          setUnauthorizedDomainModal={setUnauthorizedDomainModal}
+          showToast={showToast}
+          onNavigate={(p) => navigate(p)}
+        />
+        <Toast message={toastMsg} />
+      </div>
+    );
+  }
+
+  // --- ROOT ROUTE: WORLD-CLASS RESPONSIVE LANDING PAGE (/) ---
+  if (pathname === '/' || pathname === '') {
+    return (
+      <div className="min-h-screen bg-[var(--bg)]">
+        <LandingPage
+          user={user}
+          onNavigate={(p) => navigate(p)}
+          theme={theme}
+          onToggleTheme={() => {
+            const nextTheme = theme === 'dark' ? 'light' : 'dark';
+            setTheme(nextTheme);
+            localStorage.setItem('mm_theme', nextTheme);
+            if (nextTheme === 'dark') {
+              document.documentElement.classList.add('dark');
+            } else {
+              document.documentElement.classList.remove('dark');
+            }
+          }}
+          showToast={showToast}
+        />
+        <Toast message={toastMsg} />
+      </div>
+    );
+  }
+
+  // --- PROTECTED APP ROUTE: IF NOT SIGNED IN, REDIRECT/RENDER LOGIN ---
   if (!user) {
     return (
-      <div id="gate">
-        <div className="gc">
-          <div className="gb">
-            <i><Icon name="bowl" size={22} /></i>
-            <span className="font-serif">KhaonKhata (খাওনখাতা)</span>
-          </div>
-          <h2>স্বাগতম</h2>
-          <p className="mut mb-6">
-            রিয়েলটাইম মেস মিল ও হিসাব দেখতে আপনার Google অ্যাকাউন্ট দিয়ে লগইন করুন।
-          </p>
-
-          <button
-            onClick={handleGoogleSignIn}
-            className="w-full py-3.5 px-6 rounded-2xl bg-white text-gray-800 font-semibold border border-gray-300 shadow-sm hover:shadow-md hover:bg-gray-50 flex items-center justify-center gap-3 transition-all cursor-pointer text-base"
-          >
-            <GoogleIcon size={22} />
-            <span>Google দিয়ে চালিয়ে যান</span>
-          </button>
-
-          <div className="mt-8 pt-6 border-t border-[var(--line)] text-center text-xs text-[var(--mut)] space-y-2">
-            <p>✓ তাৎক্ষণিক রিয়েলটাইম সিঙ্ক (Firestore)</p>
-            <p>✓ প্রতিদিনের মিল চার্ট, বাজার খরচ ও জমা</p>
-            <p>✓ স্বয়ংক্রিয় মিল রেট ও ব্যালেন্স হিসাব</p>
-            <div className="pt-2">
-              <a
-                href="/about"
-                onClick={(e) => {
-                  e.preventDefault();
-                  setTab('about');
-                  window.history.pushState({}, '', '/about');
-                }}
-                className="text-[var(--pri)] font-semibold hover:underline inline-flex items-center gap-1.5 cursor-pointer"
-              >
-                <Icon name="user" size={14} />
-                <span>About Us &amp; Founder (আমাদের সম্পর্কে)</span>
-              </a>
-            </div>
-          </div>
-        </div>
-
-        {/* Unauthorized Domain Error Modal */}
-        {unauthorizedDomainModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="card !max-w-md w-full p-6 space-y-4 shadow-2xl">
-              <div className="flex items-center gap-3 text-amber-600">
-                <span className="text-2xl">⚠️</span>
-                <h3 className="text-base font-bold text-[var(--fg)]">
-                  Firebase ডোমেইন অনুমোদন প্রয়োজন
-                </h3>
-              </div>
-
-              <p className="text-xs text-[var(--mut)] leading-relaxed">
-                আপনার Firebase প্রজেক্টে (<b>khaonkhata</b>) গুগল সাইন-ইন চালু করতে এই ডোমেইনটি Authorized Domains তালিকায় যুক্ত করতে হবে:
-              </p>
-
-              {/* Domain Copy Box */}
-              <div className="p-3 rounded-xl bg-[var(--line)] flex items-center justify-between gap-2">
-                <code className="text-xs font-mono break-all text-emerald-600 dark:text-emerald-400 font-semibold select-all">
-                  {typeof window !== 'undefined' ? window.location.hostname : ''}
-                </code>
-                <button
-                  className="btn s !bg-emerald-600 !text-white flex-shrink-0 cursor-pointer"
-                  onClick={() => {
-                    if (typeof window !== 'undefined') {
-                      navigator.clipboard.writeText(window.location.hostname);
-                      showToast('✅ ডোমেইন কপি হয়েছে!');
-                    }
-                  }}
-                >
-                  কপি
-                </button>
-              </div>
-
-              <div className="text-xs text-[var(--mut)] space-y-1.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                <b>ডোমেইন যুক্ত করার সহজ ৩টি ধাপ:</b>
-                <ol className="list-decimal pl-4 space-y-1 mt-1 text-[var(--fg)]">
-                  <li>
-                    Firebase Console-এ যান:{' '}
-                    <a
-                      href="https://console.firebase.google.com/project/khaonkhata/authentication/settings"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-emerald-600 underline font-medium"
-                    >
-                      Auth &gt; Settings
-                    </a>
-                  </li>
-                  <li><b>Authorized domains</b> সেকশনে <b>Add domain</b>-এ ক্লিক করুন</li>
-                  <li>কপি করা ডোমেইনটি পেস্ট করে সেভ করুন।</li>
-                </ol>
-              </div>
-
-              <div className="pt-2">
-                <button
-                  className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 w-full cursor-pointer text-sm font-semibold"
-                  onClick={() => setUnauthorizedDomainModal(false)}
-                >
-                  ঠিক আছে (বন্ধ করুন)
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+      <div className="min-h-screen bg-[var(--bg)]">
+        <LoginPage
+          onGoogleSignIn={handleGoogleSignIn}
+          onBackToHome={() => navigate('/')}
+          unauthorizedDomainModal={unauthorizedDomainModal}
+          setUnauthorizedDomainModal={setUnauthorizedDomainModal}
+          showToast={showToast}
+          onNavigate={(p) => navigate(p)}
+        />
         <Toast message={toastMsg} />
       </div>
     );
@@ -1819,10 +1842,16 @@ export default function App() {
                 </div>
               )}
 
-              <div className="mt-6 pt-4 border-t border-[var(--line)] text-center">
+              <div className="mt-6 pt-4 border-t border-[var(--line)] flex justify-between items-center text-xs">
+                <button
+                  onClick={() => navigate('/')}
+                  className="lnk text-emerald-600 hover:underline cursor-pointer"
+                >
+                  ← হোমপেজে যান (Landing)
+                </button>
                 <button
                   onClick={handleSignOut}
-                  className="lnk text-sm text-[var(--bad)] hover:underline"
+                  className="lnk text-[var(--bad)] hover:underline cursor-pointer"
                 >
                   লগআউট করুন
                 </button>
@@ -2049,6 +2078,37 @@ export default function App() {
           <Icon name="list" size={18} />
           <span>All Months</span>
         </button>
+
+        <div className="pt-2 border-t border-[var(--line)] space-y-1">
+          <button
+            onClick={() => { navigate('/'); setDrawerOpen(false); }}
+            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
+          >
+            <span>🏠</span>
+            <span>হোমপেজ (Landing)</span>
+          </button>
+          <button
+            onClick={() => { navigate('/privacy'); setDrawerOpen(false); }}
+            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
+          >
+            <span>🛡️</span>
+            <span>Privacy Policy</span>
+          </button>
+          <button
+            onClick={() => { navigate('/terms'); setDrawerOpen(false); }}
+            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
+          >
+            <span>📜</span>
+            <span>Terms of Service</span>
+          </button>
+          <button
+            onClick={() => { navigate('/contact'); setDrawerOpen(false); }}
+            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
+          >
+            <span>📞</span>
+            <span>Contact Us</span>
+          </button>
+        </div>
 
         <div className="mt-auto pt-4 border-t border-[var(--line)] space-y-1.5">
           <PWAInstallButton />
@@ -4319,6 +4379,34 @@ export default function App() {
           >
             <Icon name="gear" size={18} />
             <span>Mess Settings</span>
+          </button>
+
+          <p className="px-5 pt-4 pb-1 text-xs font-bold text-[var(--mut)] uppercase tracking-wider">
+            Legal &amp; Website
+          </p>
+          <button
+            onClick={() => { navigate('/'); setDrawerOpen(false); }}
+          >
+            <span>🏠</span>
+            <span>হোমপেজ (Landing Page)</span>
+          </button>
+          <button
+            onClick={() => { navigate('/privacy'); setDrawerOpen(false); }}
+          >
+            <span>🛡️</span>
+            <span>Privacy Policy (গোপনীয়তা)</span>
+          </button>
+          <button
+            onClick={() => { navigate('/terms'); setDrawerOpen(false); }}
+          >
+            <span>📜</span>
+            <span>Terms of Service (শর্তাবলী)</span>
+          </button>
+          <button
+            onClick={() => { navigate('/contact'); setDrawerOpen(false); }}
+          >
+            <span>📞</span>
+            <span>Contact Us (যোগাযোগ)</span>
           </button>
 
           <div className="px-5 pt-6 space-y-2.5">

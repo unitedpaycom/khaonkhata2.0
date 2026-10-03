@@ -1,4 +1,4 @@
-import { EmailPayload } from '../../api/send-email';
+import type { EmailPayload } from '../types';
 
 /**
  * Dispatch an email notification request to the backend /api/send-email endpoint.
