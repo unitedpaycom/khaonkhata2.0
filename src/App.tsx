@@ -76,6 +76,10 @@ import {
   downloadIndividualReportPDF,
   downloadGroupReportPDF,
 } from './utils/pdfExport';
+import {
+  sendMealConfirmationEmail,
+  sendDepositConfirmationEmail,
+} from './utils/emailClient';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -989,6 +993,20 @@ export default function App() {
     const targetMember = messState.members.find(m => m.id === depMember);
     const mName = targetMember?.name || 'সদস্য';
 
+    // Dispatch Resend confirmation email
+    const targetEmail = targetMember?.email || (targetMember?.uid === user?.uid ? user?.email : undefined);
+    if (targetEmail) {
+      sendDepositConfirmationEmail({
+        to: targetEmail,
+        memberName: mName,
+        messName: messState.mess,
+        amount: amt,
+        depositDate: depDate,
+        note: depNote.trim(),
+        status: 'approved',
+      });
+    }
+
     createNotification({
       type: 'deposit',
       title: `💰 নতুন জমা যোগ: ${mName}`,
@@ -1169,6 +1187,21 @@ export default function App() {
             slotDetails: draft ? { b: draft.b, l: draft.l, d: draft.d } : { b: 0, l: 0, d: 0 },
             totalMeals: draft ? mt(draft) : 0,
           });
+
+          // Dispatch Resend confirmation email
+          const targetEmail = m.email || (m.uid === user?.uid ? user?.email : undefined);
+          if (targetEmail) {
+            sendMealConfirmationEmail({
+              to: targetEmail,
+              memberName: m.name,
+              messName: messState.mess,
+              date: mealDate,
+              breakfast: draft?.b || 0,
+              lunch: draft?.l || 0,
+              dinner: draft?.d || 0,
+              action: hadPrev ? 'updated' : 'added',
+            });
+          }
         }
       }
     });
@@ -1227,6 +1260,23 @@ export default function App() {
       date: req.date || TD,
       note: `অনলাইন ডিপোজিট (${req.method.toUpperCase()} - ${req.senderNumber})`,
     };
+
+    // Dispatch Resend confirmation email
+    const targetEmail = targetMember?.email;
+    if (targetEmail) {
+      sendDepositConfirmationEmail({
+        to: targetEmail,
+        memberName: req.memberName,
+        messName: messState.mess,
+        amount: req.amount,
+        depositDate: req.date || TD,
+        method: req.method,
+        senderNumber: req.senderNumber,
+        trxId: req.trxId,
+        status: 'approved',
+      });
+    }
+
     const nextRequests = (messState.depositRequests || []).map(r =>
       r.id === req.id
         ? {
@@ -1325,6 +1375,23 @@ export default function App() {
       createdAt: new Date().toISOString(),
     };
 
+    // Dispatch Resend confirmation email to user
+    const targetEmail = currentMember?.email || user?.email;
+    if (targetEmail) {
+      sendDepositConfirmationEmail({
+        to: targetEmail,
+        memberName,
+        messName: messState.mess,
+        amount: Number(data.amount) || 0,
+        depositDate: TD,
+        method: data.method,
+        senderNumber: data.senderNumber,
+        trxId: data.trxId,
+        status: 'pending',
+        note: 'পেমেন্ট রিকোয়েস্ট সফলভাবে মেসে জমা দেওয়া হয়েছে (ম্যানেজার অনুমোদন করবেন)',
+      });
+    }
+
     createNotification({
       type: 'deposit',
       title: `💳 জমা রিকোয়েস্ট: ${memberName}`,
@@ -1393,6 +1460,21 @@ export default function App() {
       };
       saveStateToFirestore(nextState, 'রিকোয়েস্ট পাঠানো হয়েছে');
     });
+
+    // Dispatch Resend confirmation email to member
+    const targetEmail = currentMember.email || user?.email;
+    if (targetEmail) {
+      sendMealConfirmationEmail({
+        to: targetEmail,
+        memberName: currentMember.name,
+        messName: messState.mess,
+        date: dateStr,
+        breakfast: b,
+        lunch: l,
+        dinner: d,
+        action: 'requested',
+      });
+    }
   };
 
   // Approve Meal Request
@@ -1441,6 +1523,20 @@ export default function App() {
       slotDetails: { b: target.b, l: target.l, d: target.d },
       totalMeals: target.b + target.l + target.d,
     });
+
+    // Dispatch Resend confirmation email to member
+    if (targetMember?.email) {
+      sendMealConfirmationEmail({
+        to: targetMember.email,
+        memberName: targetMember.name,
+        messName: messState.mess,
+        date: target.date,
+        breakfast: target.b,
+        lunch: target.l,
+        dinner: target.d,
+        action: 'approved',
+      });
+    }
   };
 
   // Reject Meal Request
