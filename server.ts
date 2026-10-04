@@ -5,6 +5,10 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import sendEmailHandler from './api/send-email';
+import sendMessUpdateHandler from './api/send-mess-update';
+import requestPasswordResetHandler from './api/auth/request-password-reset';
+import verifyAndResetPasswordHandler from './api/auth/verify-and-reset-password';
+import loginWithPasswordHandler from './api/auth/login-with-password';
 
 dotenv.config();
 
@@ -18,7 +22,15 @@ async function startServer() {
 
   app.use(express.json());
 
-  // Backend Resend Email Notification Route
+  // Password Reset (Forgot Password) Flow Routes
+  app.post('/api/auth/request-password-reset', requestPasswordResetHandler);
+  app.post('/api/auth/verify-and-reset-password', verifyAndResetPasswordHandler);
+  app.post('/api/auth/login-with-password', loginWithPasswordHandler);
+
+  // Automated Member-Specific Daily Mess Update Flow Route
+  app.post('/api/send-mess-update', sendMessUpdateHandler);
+
+  // General Transactional Email Route
   app.post('/api/send-email', sendEmailHandler);
 
   // Healthcheck endpoint

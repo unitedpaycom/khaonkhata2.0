@@ -11,6 +11,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
+import { requestPasswordResetOTP, verifyOTPAndResetPassword } from '../utils/emailClient';
 
 interface LoginPageProps {
   onGoogleSignIn: () => void;
@@ -19,6 +20,7 @@ interface LoginPageProps {
   setUnauthorizedDomainModal: (val: boolean) => void;
   showToast: (msg: string) => void;
   onNavigate: (path: string) => void;
+  onUserAuthenticated?: (user: { uid: string; email: string | null; displayName: string | null; photoURL?: string | null }) => void;
 }
 
 export const LoginPage: React.FC<LoginPageProps> = ({
@@ -26,6 +28,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   setUnauthorizedDomainModal,
   showToast,
   onNavigate,
+  onUserAuthenticated,
 }) => {
   // Mode: 'login' | 'signup'
   const [mode, setMode] = useState<'login' | 'signup'>(() => {
@@ -54,6 +57,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({
   // Banner Message & Loading State
   const [message, setMessage] = useState<{ type: 'info' | 'error' | 'ok'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Forgot Password Modal State
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotOtp, setForgotOtp] = useState('');
+  const [forgotNewPass, setForgotNewPass] = useState('');
+  const [forgotConfirmPass, setForgotConfirmPass] = useState('');
+  const [showForgotNewPass, setShowForgotNewPass] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [forgotError, setForgotError] = useState<string | null>(null);
+  const [forgotSuccess, setForgotSuccess] = useState<string | null>(null);
+  const [forgotCountdown, setForgotCountdown] = useState(0);
+
+  // Countdown timer for OTP resend
+  useEffect(() => {
+    if (forgotCountdown <= 0) return;
+    const interval = setInterval(() => {
+      setForgotCountdown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [forgotCountdown]);
 
   // Sync mode with hash if hash changes
   useEffect(() => {
@@ -192,15 +217,71 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
       const res = await signInWithEmailAndPassword(auth, cleanEmail, password);
       if (res.user) {
+        const appUser = {
+          uid: res.user.uid,
+          email: res.user.email,
+          displayName: res.user.displayName,
+          photoURL: res.user.photoURL,
+        };
+        try {
+          localStorage.setItem('khaonkhata_auth_user', JSON.stringify(appUser));
+        } catch {
+          // ignore
+        }
+        if (onUserAuthenticated) {
+          onUserAuthenticated(appUser);
+        }
         setMessage({ type: 'ok', text: 'Success! Logging in…' });
         showToast(`স্বাগতম, ${res.user.displayName || 'ব্যবহারকারী'}`);
         setTimeout(() => {
           onNavigate('/app');
-        }, 300);
+        }, 200);
       }
     } catch (err: any) {
-      console.error('Email login error:', err);
-      setMessage({ type: 'error', text: getFirebaseErrorMessage(err) });
+      console.warn('Firebase email login failed, checking reset password in database...', err?.code);
+
+      // Check if user has an updated password from OTP reset flow
+      let loggedIn = false;
+      try {
+        const verifyRes = await fetch('/api/auth/login-with-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail, password }),
+        });
+        if (verifyRes.ok) {
+          const verifyData = await verifyRes.json();
+          if (verifyData.success && verifyData.user) {
+            loggedIn = true;
+            const appUser = {
+              uid: verifyData.user.uid,
+              email: verifyData.user.email,
+              displayName: verifyData.user.name,
+              photoURL: verifyData.user.photoURL,
+            };
+            try {
+              localStorage.setItem('khaonkhata_auth_user', JSON.stringify(appUser));
+            } catch {
+              // ignore
+            }
+            if (onUserAuthenticated) {
+              onUserAuthenticated(appUser);
+            }
+            setMessage({ type: 'ok', text: 'Success! Logging in…' });
+            showToast(`স্বাগতম, ${verifyData.user.name || 'ব্যবহারকারী'}`);
+            setTimeout(() => {
+              onNavigate('/app');
+            }, 200);
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Fallback login check failed:', checkErr);
+      }
+
+      if (!loggedIn) {
+        console.error('Email login error:', err);
+        setMessage({ type: 'error', text: getFirebaseErrorMessage(err) });
+      }
     } finally {
       setLoading(false);
     }
@@ -267,30 +348,103 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   };
 
-  // Forgot Password
-  const handleForgotPassword = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    const cleanEmail = email.trim();
-    if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
-      setErrors((prev) => ({ ...prev, email: 'Enter your email first, then tap “Forgot password?”' }));
+  // Open OTP Password Reset Modal
+  const handleOpenForgotModal = (e?: React.MouseEvent) => {
+    if (e) e.preventDefault();
+    setForgotEmail(email.trim());
+    setForgotOtp('');
+    setForgotNewPass('');
+    setForgotConfirmPass('');
+    setForgotError(null);
+    setForgotSuccess(null);
+    setForgotStep(1);
+    setShowForgotModal(true);
+  };
+
+  // Step 1: Request 6-Digit OTP via Resend API
+  const handleRequestOTP = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const clean = forgotEmail.trim().toLowerCase();
+    if (!clean || !/^\S+@\S+\.\S+$/.test(clean)) {
+      setForgotError('অনুগ্রহ করে সঠিক ইমেইল এড্রেস লিখুন।');
       return;
     }
 
-    setLoading(true);
-    setMessage(null);
+    setForgotLoading(true);
+    setForgotError(null);
+    setForgotSuccess(null);
     try {
-      await sendPasswordResetEmail(auth, cleanEmail);
-      setMessage({
-        type: 'info',
-        text: `Password reset email sent to ${cleanEmail}. Check your inbox or spam folder.`,
-      });
-      showToast('পাসওয়ার্ড রিসেট লিঙ্ক আপনার ইমেইলে পাঠানো হয়েছে!');
+      const res = await requestPasswordResetOTP(clean);
+      if (res.success) {
+        setForgotStep(2);
+        setForgotCountdown(60);
+        setForgotSuccess(res.message || '৬-সংখ্যার ওটিপি কোড আপনার ইমেইলে পাঠানো হয়েছে (মেয়াদ ১০ মিনিট)।');
+        showToast('ওটিপি কোড সফলভাবে পাঠানো হয়েছে!');
+      } else {
+        setForgotError(res.error || 'ওটিপি পাঠাতে সমস্যা হয়েছে।');
+      }
     } catch (err: any) {
-      console.error('Password reset error:', err);
-      setMessage({ type: 'error', text: getFirebaseErrorMessage(err) });
+      setForgotError(err?.message || 'নেটওয়ার্ক ত্রুটি। আবার চেষ্টা করুন।');
     } finally {
-      setLoading(false);
+      setForgotLoading(false);
     }
+  };
+
+  // Step 2: Validate OTP and Hash Password in Database
+  const handleVerifyAndReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = forgotEmail.trim().toLowerCase();
+    const code = forgotOtp.trim();
+
+    if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+      setForgotError('অনুগ্রহ করে সঠিক ৬-সংখ্যার ওটিপি কোড লিখুন।');
+      return;
+    }
+    if (!forgotNewPass || forgotNewPass.length < 6) {
+      setForgotError('নতুন পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।');
+      return;
+    }
+    if (forgotNewPass !== forgotConfirmPass) {
+      setForgotError('উভয় পাসওয়ার্ড মেলেনি। আবার পরীক্ষা করুন।');
+      return;
+    }
+
+    setForgotLoading(true);
+    setForgotError(null);
+    setForgotSuccess(null);
+    try {
+      const res = await verifyOTPAndResetPassword({
+        email: clean,
+        code,
+        newPassword: forgotNewPass,
+      });
+
+      if (res.success) {
+        setForgotSuccess('পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!');
+        showToast('পাসওয়ার্ড রিসেট সফল! নতুন পাসওয়ার্ড দিয়ে লগইন করুন।');
+        // Pre-fill login email & password
+        setEmail(clean);
+        setPassword(forgotNewPass);
+        setTimeout(() => {
+          setShowForgotModal(false);
+          setMessage({
+            type: 'ok',
+            text: 'পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে। এখন লগইন বাটনে ক্লিক করুন।',
+          });
+        }, 1200);
+      } else {
+        setForgotError(res.error || 'পাসওয়ার্ড রিসেট ব্যর্থ হয়েছে।');
+      }
+    } catch (err: any) {
+      setForgotError(err?.message || 'নেটওয়ার্ক ত্রুটি। আবার চেষ্টা করুন।');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  // Legacy fallback password reset
+  const handleForgotPassword = (e: React.MouseEvent) => {
+    handleOpenForgotModal(e);
   };
 
   // Expose backend auth interface on window.KhaonKhataAuth for external/headless invocation
@@ -335,12 +489,6 @@ export const LoginPage: React.FC<LoginPageProps> = ({
       {/* SVG Icon Definitions */}
       <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
         <defs>
-          <symbol id="auth-eye" viewBox="0 0 24 24">
-            <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 15a3 3 0 100-6 3 3 0 000 6" />
-          </symbol>
-          <symbol id="auth-eyeoff" viewBox="0 0 24 24">
-            <path d="M3 3l18 18M10.6 6.2A9.8 9.8 0 0112 6c6 0 10 6 10 6a17 17 0 01-3.2 3.8M6.5 7.6A17 17 0 002 12s4 6 10 6c1.5 0 2.9-.4 4.1-1M9.9 9.9a3 3 0 004.2 4.2" />
-          </symbol>
           <symbol id="auth-check" viewBox="0 0 24 24">
             <path d="M5 12l5 5L20 7" />
           </symbol>
@@ -615,10 +763,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   id="eye"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  title={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  <svg className="i">
-                    <use href={showPassword ? '#auth-eyeoff' : '#auth-eye'} />
-                  </svg>
+                  {showPassword ? (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                      <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68" />
+                      <path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61" />
+                      <line x1="2" y1="2" x2="22" y2="22" />
+                    </svg>
+                  ) : (
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
                 </button>
               </div>
               <div className="auth-er" id="pw-e" aria-live="polite">
@@ -705,14 +864,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                       </b>
                       <span>Remember me</span>
                     </label>
-                    <a
-                      href="#forgot"
+                    <button
+                      type="button"
                       id="forgot"
-                      onClick={handleForgotPassword}
-                      style={{ fontSize: '14px' }}
+                      onClick={handleOpenForgotModal}
+                      className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer bg-transparent border-0 p-0 transition-colors"
+                      style={{ fontSize: '14px', color: '#059669', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}
                     >
                       Forgot password?
-                    </a>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -761,6 +921,208 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </p>
         </section>
       </div>
+
+      {/* Forgot Password OTP Modal */}
+      {showForgotModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in"
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', backgroundColor: 'rgba(0,0,0,0.65)' }}
+        >
+          <div
+            className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+            style={{ maxWidth: '440px', width: '100%', backgroundColor: '#ffffff', borderRadius: '16px', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1)', overflow: 'hidden' }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)', color: '#ffffff' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: '#ffffff' }}>
+                  🔑 পাসওয়ার্ড রিসেট (OTP ভেরিফিকেশন)
+                </h3>
+                <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#d1fae5' }}>
+                  {forgotStep === 1 ? 'রেজিস্টার্ড ইমেইলে ওটিপি কোড পাঠানো হবে' : 'ইমেইল থেকে ওটিপি কোড ও নতুন পাসওয়ার্ড দিন'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowForgotModal(false)}
+                style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', color: '#ffffff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold' }}
+                title="বন্ধ করুন"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: '24px' }}>
+              {/* Alert Feedback */}
+              {forgotError && (
+                <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#991b1b', fontSize: '13px', marginBottom: '16px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <span>⚠️</span>
+                  <span>{forgotError}</span>
+                </div>
+              )}
+              {forgotSuccess && (
+                <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', fontSize: '13px', marginBottom: '16px', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                  <span>✅</span>
+                  <span>{forgotSuccess}</span>
+                </div>
+              )}
+
+              {/* STEP 1: Enter Email & Request OTP */}
+              {forgotStep === 1 && (
+                <form onSubmit={handleRequestOTP}>
+                  <div style={{ marginBottom: '18px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                      আপনার রেজিস্টার্ড ইমেইল এড্রেস:
+                    </label>
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="e.g. member@gmail.com"
+                      required
+                      autoFocus
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '15px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                    <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
+                      Resend API-এর মাধ্যমে <b>verify@khaonkhata.online</b> থেকে ৬-সংখ্যার ওটিপি কোড পাঠানো হবে।
+                    </p>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', marginTop: '22px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      style={{ flex: 1, padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      বাতিল
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      style={{ flex: 2, padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#059669', color: '#ffffff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', opacity: forgotLoading ? 0.7 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                    >
+                      {forgotLoading ? 'ওটিপি পাঠানো হচ্ছে...' : 'ওটিপি কোড পাঠান ➔'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* STEP 2: Input OTP & New Password */}
+              {forgotStep === 2 && (
+                <form onSubmit={handleVerifyAndReset}>
+                  <div style={{ marginBottom: '14px', padding: '10px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ fontSize: '13px', color: '#334155' }}>
+                      <span>ইমেইল: </span>
+                      <b style={{ color: '#059669' }}>{forgotEmail}</b>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotStep(1);
+                        setForgotError(null);
+                        setForgotSuccess(null);
+                      }}
+                      style={{ border: 'none', background: 'transparent', color: '#2563eb', fontSize: '12px', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      পরিবর্তন
+                    </button>
+                  </div>
+
+                  {/* 6-Digit OTP Code Input */}
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                      ৬-সংখ্যার ওটিপি কোড (OTP):
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={6}
+                      value={forgotOtp}
+                      onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ''))}
+                      placeholder="123456"
+                      required
+                      autoFocus
+                      style={{ width: '100%', padding: '12px', borderRadius: '8px', border: '2px solid #059669', fontSize: '22px', fontWeight: 800, textAlign: 'center', letterSpacing: '8px', color: '#0f172a', fontFamily: 'monospace', outline: 'none', boxSizing: 'border-box', background: '#f0fdf4' }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>ইমেইলের ইনবক্স বা স্প্যাম ফোল্ডার দেখুন</span>
+                      {forgotCountdown > 0 ? (
+                        <span style={{ fontSize: '11px', color: '#94a3b8' }}>পুনরায় পাঠানো যাবে ({forgotCountdown}s)</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handleRequestOTP()}
+                          disabled={forgotLoading}
+                          style={{ border: 'none', background: 'transparent', color: '#059669', fontSize: '12px', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                        >
+                          পুনরায় ওটিপি পাঠান
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* New Password */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                      নতুন পাসওয়ার্ড:
+                    </label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        type={showForgotNewPass ? 'text' : 'password'}
+                        value={forgotNewPass}
+                        onChange={(e) => setForgotNewPass(e.target.value)}
+                        placeholder="কমপক্ষে ৮ অক্ষর লিখুন"
+                        required
+                        style={{ width: '100%', padding: '10px 40px 10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotNewPass(!showForgotNewPass)}
+                        style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '14px', color: '#64748b' }}
+                      >
+                        {showForgotNewPass ? '🙈' : '👁️'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password */}
+                  <div style={{ marginBottom: '20px' }}>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#334155', marginBottom: '6px' }}>
+                      নতুন পাসওয়ার্ড নিশ্চিত করুন:
+                    </label>
+                    <input
+                      type={showForgotNewPass ? 'text' : 'password'}
+                      value={forgotConfirmPass}
+                      onChange={(e) => setForgotConfirmPass(e.target.value)}
+                      placeholder="পাসওয়ার্ড পুনরায় লিখুন"
+                      required
+                      style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setShowForgotModal(false)}
+                      style={{ flex: 1, padding: '10px 16px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', color: '#475569', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      বাতিল
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      style={{ flex: 2, padding: '10px 16px', borderRadius: '8px', border: 'none', background: '#059669', color: '#ffffff', fontSize: '14px', fontWeight: 600, cursor: 'pointer', opacity: forgotLoading ? 0.7 : 1 }}
+                    >
+                      {forgotLoading ? 'রিসেট করা হচ্ছে...' : 'পাসওয়ার্ড রিসেট করুন ✅'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

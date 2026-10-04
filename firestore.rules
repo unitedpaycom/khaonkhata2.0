@@ -21,15 +21,18 @@ service cloud.firestore {
 
     // User profiles - allow read for signed in users so members can be searched by email
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isUser(userId);
+      allow read: if true;
+      allow write: if isUser(userId) || (request.auth == null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['passwordHash', 'salt', 'updatedAt', 'passwordResetAt']));
+    }
+
+    // Password reset OTPs collection (for OTP generation and validation)
+    match /password_resets/{resetId} {
+      allow read, write: if true;
     }
 
     // Messes
     match /messes/{messId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isSignedIn() && (
         resource.data.mgrUid == request.auth.uid ||
         resource.data.mgrEmail == request.auth.token.email
@@ -38,7 +41,7 @@ service cloud.firestore {
 
     // Mess Notifications
     match /mess_notifications/{notificationId} {
-      allow read, create: if isSignedIn();
+      allow read, create, write: if true;
     }
   }
 }

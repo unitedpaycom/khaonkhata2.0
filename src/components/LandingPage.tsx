@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { User } from 'firebase/auth';
 
 interface LandingPageProps {
-  user: User | null;
+  user: { uid: string; email?: string | null; displayName?: string | null; photoURL?: string | null } | User | null;
   onNavigate: (path: string) => void;
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;

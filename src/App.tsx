@@ -79,6 +79,7 @@ import {
 import {
   sendMealConfirmationEmail,
   sendDepositConfirmationEmail,
+  sendMemberDailyMessUpdate,
 } from './utils/emailClient';
 import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
@@ -86,8 +87,22 @@ import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { TermsPage } from './components/TermsPage';
 import { ContactPage } from './components/ContactPage';
 
+export interface AppUser {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL?: string | null;
+}
+
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | User | null>(() => {
+    try {
+      const saved = localStorage.getItem('khaonkhata_auth_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
@@ -360,46 +375,91 @@ export default function App() {
     onConfirm: () => {},
   });
 
-  // Listen to Auth State
-  useEffect(() => {
-    const unsub = auth.onAuthStateChanged(async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Fetch or create user profile
-        try {
-          const userDocRef = doc(db, 'users', currentUser.uid);
-          const snap = await getDoc(userDocRef);
-          if (snap.exists()) {
-            const data = snap.data() as UserProfile;
-            setProfile(data);
-            if (data.currentMessId && !currentMessId) {
-              setCurrentMessId(data.currentMessId);
-              localStorage.setItem('mm_cur_mess_id', data.currentMessId);
-            }
-          } else {
-            const newProfile: UserProfile = {
-              uid: currentUser.uid,
-              name: currentUser.displayName || 'User',
-              email: currentUser.email || '',
-              photoURL: currentUser.photoURL || undefined,
-              joinedMesses: [],
-            };
-            await setDoc(userDocRef, newProfile);
-            setProfile(newProfile);
-          }
-
-          // Request notification permission and register FCM device token
-          requestFcmPermissionAndGetToken(currentUser.uid).then((token) => {
-            if (token) {
-              setProfile((prev) => (prev ? { ...prev, fcmToken: token } : null));
-            }
-          });
-        } catch (err) {
-          handleFirestoreError(err, OperationType.GET, 'users/' + currentUser.uid);
-        } finally {
-          setAuthLoading(false);
+  // Synchronize user profile from Firestore for both Firebase Auth and Custom authenticated users
+  const syncUserProfile = async (currentUser: AppUser | User) => {
+    try {
+      const userDocRef = doc(db, 'users', currentUser.uid);
+      const snap = await getDoc(userDocRef);
+      if (snap.exists()) {
+        const data = snap.data() as UserProfile;
+        setProfile(data);
+        if (data.currentMessId && !currentMessId) {
+          setCurrentMessId(data.currentMessId);
+          localStorage.setItem('mm_cur_mess_id', data.currentMessId);
         }
       } else {
+        const newProfile: UserProfile = {
+          uid: currentUser.uid,
+          name: currentUser.displayName || 'User',
+          email: currentUser.email || '',
+          photoURL: currentUser.photoURL || undefined,
+          joinedMesses: [],
+        };
+        await setDoc(userDocRef, newProfile);
+        setProfile(newProfile);
+      }
+
+      // Request notification permission and register FCM device token
+      requestFcmPermissionAndGetToken(currentUser.uid).then((token) => {
+        if (token) {
+          setProfile((prev) => (prev ? { ...prev, fcmToken: token } : null));
+        }
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, 'users/' + currentUser.uid);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleUserAuthenticated = (authenticatedUser: AppUser) => {
+    setUser(authenticatedUser);
+    try {
+      localStorage.setItem('khaonkhata_auth_user', JSON.stringify(authenticatedUser));
+    } catch {
+      // ignore
+    }
+    syncUserProfile(authenticatedUser);
+    navigate('/app');
+  };
+
+  // Listen to Auth State (Firebase Auth & Custom OTP Hashed Session)
+  useEffect(() => {
+    if (user) {
+      syncUserProfile(user);
+    }
+
+    const unsub = auth.onAuthStateChanged(async (currentUser) => {
+      if (currentUser) {
+        const appUser: AppUser = {
+          uid: currentUser.uid,
+          email: currentUser.email,
+          displayName: currentUser.displayName,
+          photoURL: currentUser.photoURL,
+        };
+        setUser(appUser);
+        try {
+          localStorage.setItem('khaonkhata_auth_user', JSON.stringify(appUser));
+        } catch {
+          // ignore
+        }
+        await syncUserProfile(currentUser);
+      } else {
+        // Fallback: Check if a custom authenticated user is saved in localStorage
+        const saved = localStorage.getItem('khaonkhata_auth_user');
+        if (saved) {
+          try {
+            const parsed: AppUser = JSON.parse(saved);
+            if (parsed && parsed.uid) {
+              setUser(parsed);
+              await syncUserProfile(parsed);
+              return;
+            }
+          } catch {
+            // ignore
+          }
+        }
+        setUser(null);
         setProfile(null);
         setMessState(null);
         setMessLoading(false);
@@ -810,6 +870,7 @@ export default function App() {
       setUser(null);
       setCurrentMessId('');
       localStorage.removeItem('mm_cur_mess_id');
+      localStorage.removeItem('khaonkhata_auth_user');
       setMessState(null);
       showToast('লগআউট সম্পন্ন হয়েছে');
       navigate('/');
@@ -818,6 +879,7 @@ export default function App() {
       setUser(null);
       setCurrentMessId('');
       localStorage.removeItem('mm_cur_mess_id');
+      localStorage.removeItem('khaonkhata_auth_user');
       setMessState(null);
       navigate('/');
     }
@@ -1025,9 +1087,27 @@ export default function App() {
     const targetMember = messState.members.find(m => m.id === depMember);
     const mName = targetMember?.name || 'সদস্য';
 
-    // Dispatch Resend confirmation email
+    // Dispatch Resend confirmation and automated Mess Update email
     const targetEmail = targetMember?.email || (targetMember?.uid === user?.uid ? user?.email : undefined);
     if (targetEmail) {
+      const mSummary = monthSummary?.mm[depMember] || { dep: 0, bal: 0 };
+      const currentDaySlot = messState.meals[depDate]?.[depMember];
+      const dayMealsCount = currentDaySlot ? mt(currentDaySlot) : 0;
+      const updatedTotalDep = (mSummary.dep || 0) + amt;
+      const updatedBalance = (mSummary.bal || 0) + amt;
+
+      // Automated Member-Specific Daily Mess Update email (Template: mess-update)
+      sendMemberDailyMessUpdate({
+        to: targetEmail,
+        userName: mName,
+        dailyMeals: dayMealsCount,
+        totalDeposit: updatedTotalDep,
+        currentBalance: updatedBalance,
+        messId: messState.id,
+        memberId: depMember,
+        date: depDate,
+      });
+
       sendDepositConfirmationEmail({
         to: targetEmail,
         memberName: mName,
@@ -1220,9 +1300,24 @@ export default function App() {
             totalMeals: draft ? mt(draft) : 0,
           });
 
-          // Dispatch Resend confirmation email
+          // Dispatch Resend confirmation and automated Mess Update email
           const targetEmail = m.email || (m.uid === user?.uid ? user?.email : undefined);
           if (targetEmail) {
+            const mSummary = monthSummary?.mm[m.id] || { dep: 0, bal: 0 };
+            const dailyMealsCount = draft ? mt(draft) : 0;
+
+            // Automated Member-Specific Daily Mess Update email (Template: mess-update)
+            sendMemberDailyMessUpdate({
+              to: targetEmail,
+              userName: m.name,
+              dailyMeals: dailyMealsCount,
+              totalDeposit: mSummary.dep || 0,
+              currentBalance: mSummary.bal || 0,
+              messId: messState.id,
+              memberId: m.id,
+              date: mealDate,
+            });
+
             sendMealConfirmationEmail({
               to: targetEmail,
               memberName: m.name,
@@ -1293,9 +1388,27 @@ export default function App() {
       note: `অনলাইন ডিপোজিট (${req.method.toUpperCase()} - ${req.senderNumber})`,
     };
 
-    // Dispatch Resend confirmation email
+    // Dispatch Resend confirmation and automated Mess Update email
     const targetEmail = targetMember?.email;
     if (targetEmail) {
+      const mSummary = monthSummary?.mm[targetMemberId] || { dep: 0, bal: 0 };
+      const currentDaySlot = messState.meals[req.date || TD]?.[targetMemberId];
+      const dayMealsCount = currentDaySlot ? mt(currentDaySlot) : 0;
+      const updatedTotalDep = (mSummary.dep || 0) + req.amount;
+      const updatedBalance = (mSummary.bal || 0) + req.amount;
+
+      // Automated Member-Specific Daily Mess Update email (Template: mess-update)
+      sendMemberDailyMessUpdate({
+        to: targetEmail,
+        userName: req.memberName,
+        dailyMeals: dayMealsCount,
+        totalDeposit: updatedTotalDep,
+        currentBalance: updatedBalance,
+        messId: messState.id,
+        memberId: targetMemberId,
+        date: req.date || TD,
+      });
+
       sendDepositConfirmationEmail({
         to: targetEmail,
         memberName: req.memberName,
@@ -1556,8 +1669,23 @@ export default function App() {
       totalMeals: target.b + target.l + target.d,
     });
 
-    // Dispatch Resend confirmation email to member
+    // Dispatch Resend confirmation and automated Mess Update email to member
     if (targetMember?.email) {
+      const mSummary = monthSummary?.mm[target.m] || { dep: 0, bal: 0 };
+      const totalApprovedMeals = target.b + target.l + target.d;
+
+      // Automated Member-Specific Daily Mess Update email (Template: mess-update)
+      sendMemberDailyMessUpdate({
+        to: targetMember.email,
+        userName: targetMember.name,
+        dailyMeals: totalApprovedMeals,
+        totalDeposit: mSummary.dep || 0,
+        currentBalance: mSummary.bal || 0,
+        messId: messState.id,
+        memberId: target.m,
+        date: target.date,
+      });
+
       sendMealConfirmationEmail({
         to: targetMember.email,
         memberName: targetMember.name,
@@ -1708,6 +1836,10 @@ export default function App() {
 
   // --- DEDICATED ROUTE: LOGIN (/login) ---
   if (pathname === '/login') {
+    if (user) {
+      setTimeout(() => navigate('/app'), 0);
+      return null;
+    }
     return (
       <div className="min-h-screen bg-[var(--bg)]">
         <LoginPage
@@ -1717,6 +1849,7 @@ export default function App() {
           setUnauthorizedDomainModal={setUnauthorizedDomainModal}
           showToast={showToast}
           onNavigate={(p) => navigate(p)}
+          onUserAuthenticated={handleUserAuthenticated}
         />
         <Toast message={toastMsg} />
       </div>
@@ -1759,6 +1892,7 @@ export default function App() {
           setUnauthorizedDomainModal={setUnauthorizedDomainModal}
           showToast={showToast}
           onNavigate={(p) => navigate(p)}
+          onUserAuthenticated={handleUserAuthenticated}
         />
         <Toast message={toastMsg} />
       </div>
@@ -2078,37 +2212,6 @@ export default function App() {
           <Icon name="list" size={18} />
           <span>All Months</span>
         </button>
-
-        <div className="pt-2 border-t border-[var(--line)] space-y-1">
-          <button
-            onClick={() => { navigate('/'); setDrawerOpen(false); }}
-            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
-          >
-            <span>🏠</span>
-            <span>হোমপেজ (Landing)</span>
-          </button>
-          <button
-            onClick={() => { navigate('/privacy'); setDrawerOpen(false); }}
-            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
-          >
-            <span>🛡️</span>
-            <span>Privacy Policy</span>
-          </button>
-          <button
-            onClick={() => { navigate('/terms'); setDrawerOpen(false); }}
-            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
-          >
-            <span>📜</span>
-            <span>Terms of Service</span>
-          </button>
-          <button
-            onClick={() => { navigate('/contact'); setDrawerOpen(false); }}
-            className="w-full text-left py-1.5 px-3 rounded-xl hover:bg-[var(--line)] text-xs text-[var(--mut)] hover:text-emerald-600 flex items-center gap-2 cursor-pointer transition"
-          >
-            <span>📞</span>
-            <span>Contact Us</span>
-          </button>
-        </div>
 
         <div className="mt-auto pt-4 border-t border-[var(--line)] space-y-1.5">
           <PWAInstallButton />
@@ -4379,34 +4482,6 @@ export default function App() {
           >
             <Icon name="gear" size={18} />
             <span>Mess Settings</span>
-          </button>
-
-          <p className="px-5 pt-4 pb-1 text-xs font-bold text-[var(--mut)] uppercase tracking-wider">
-            Legal &amp; Website
-          </p>
-          <button
-            onClick={() => { navigate('/'); setDrawerOpen(false); }}
-          >
-            <span>🏠</span>
-            <span>হোমপেজ (Landing Page)</span>
-          </button>
-          <button
-            onClick={() => { navigate('/privacy'); setDrawerOpen(false); }}
-          >
-            <span>🛡️</span>
-            <span>Privacy Policy (গোপনীয়তা)</span>
-          </button>
-          <button
-            onClick={() => { navigate('/terms'); setDrawerOpen(false); }}
-          >
-            <span>📜</span>
-            <span>Terms of Service (শর্তাবলী)</span>
-          </button>
-          <button
-            onClick={() => { navigate('/contact'); setDrawerOpen(false); }}
-          >
-            <span>📞</span>
-            <span>Contact Us (যোগাযোগ)</span>
           </button>
 
           <div className="px-5 pt-6 space-y-2.5">
