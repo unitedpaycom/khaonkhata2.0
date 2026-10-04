@@ -33,6 +33,21 @@ async function startServer() {
   // General Transactional Email Route
   app.post('/api/send-email', sendEmailHandler);
 
+  // Android TWA / Digital Asset Links Endpoint
+  app.get('/.well-known/assetlinks.json', (_req, res) => {
+    const assetlinksPath = path.resolve(__dirname, 'public/.well-known/assetlinks.json');
+    if (fs.existsSync(assetlinksPath)) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.sendFile(assetlinksPath);
+    }
+    const distAssetlinksPath = path.resolve(__dirname, 'dist/.well-known/assetlinks.json');
+    if (fs.existsSync(distAssetlinksPath)) {
+      res.setHeader('Content-Type', 'application/json');
+      return res.sendFile(distAssetlinksPath);
+    }
+    return res.status(404).json({ error: 'assetlinks.json not found' });
+  });
+
   // Healthcheck endpoint
   app.get('/api/health', (_req, res) => {
     res.json({

@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "online.khaonkhata.twa",
+    "sha256_cert_fingerprints": ["DF:BF:B5:9F:67:19:6F:C9:51:93:88:44:DB:B0:66:AB:57:BE:24:ED:64:C2:D1:6C:A3:E0:BA:67:10:2A:67:78"]
+  }
+}]
