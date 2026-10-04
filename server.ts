@@ -28,10 +28,10 @@ async function startServer() {
   app.post('/api/auth/login-with-password', loginWithPasswordHandler);
 
   // Automated Member-Specific Daily Mess Update Flow Route
-  app.post('/api/send-mess-update', sendMessUpdateHandler);
+  app.all('/api/send-mess-update', sendMessUpdateHandler);
 
   // General Transactional Email Route
-  app.post('/api/send-email', sendEmailHandler);
+  app.all('/api/send-email', sendEmailHandler);
 
   // Android TWA / Digital Asset Links Endpoint
   app.get('/.well-known/assetlinks.json', (_req, res) => {
