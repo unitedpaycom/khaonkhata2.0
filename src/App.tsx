@@ -80,6 +80,7 @@ import {
   sendMealConfirmationEmail,
   sendDepositConfirmationEmail,
   sendMemberDailyMessUpdate,
+  sendBatchMemberDailyMessUpdates,
 } from './utils/emailClient';
 import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
@@ -1275,6 +1276,19 @@ export default function App() {
       saveStateToFirestore(nextState, 'মিল সেভ হয়েছে!');
     });
 
+    // Collect all changed members who need email notifications
+    const membersToNotify: Array<{
+      to: string;
+      userName: string;
+      dailyMeals: number;
+      totalDeposit: number;
+      currentBalance: number;
+      messId: string;
+      memberId: string;
+      date: string;
+      messName: string;
+    }> = [];
+
     // Trigger push notification for members whose meal was added or updated
     messState.members.forEach((m) => {
       const draft = mealDraft[m.id];
@@ -1300,14 +1314,12 @@ export default function App() {
             totalMeals: draft ? mt(draft) : 0,
           });
 
-          // Dispatch Resend confirmation and automated Mess Update email
+          // Queue member for rate-limited batch email dispatch
           const targetEmail = m.email || (m.uid === user?.uid ? user?.email : undefined);
           if (targetEmail) {
             const mSummary = monthSummary?.mm[m.id] || { dep: 0, bal: 0 };
             const dailyMealsCount = draft ? mt(draft) : 0;
-
-            // Automated Member-Specific Daily Mess Update email (Template: mess-update)
-            sendMemberDailyMessUpdate({
+            membersToNotify.push({
               to: targetEmail,
               userName: m.name,
               dailyMeals: dailyMealsCount,
@@ -1316,22 +1328,17 @@ export default function App() {
               messId: messState.id,
               memberId: m.id,
               date: mealDate,
-            });
-
-            sendMealConfirmationEmail({
-              to: targetEmail,
-              memberName: m.name,
               messName: messState.mess,
-              date: mealDate,
-              breakfast: draft?.b || 0,
-              lunch: draft?.l || 0,
-              dinner: draft?.d || 0,
-              action: hadPrev ? 'updated' : 'added',
             });
           }
         }
       }
     });
+
+    // Execute sequential batch email dispatch with 300ms delay & safe error handling
+    if (membersToNotify.length > 0) {
+      sendBatchMemberDailyMessUpdates(membersToNotify);
+    }
   };
 
   // Targeted Meal Push Notification Handler (Manager)

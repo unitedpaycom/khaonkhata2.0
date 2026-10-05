@@ -119,7 +119,8 @@ export async function sendMemberDailyMessUpdate(params: {
   messId?: string;
   memberId?: string;
   date?: string;
-}): Promise<{ success: boolean; message?: string; error?: string }> {
+  messName?: string;
+}): Promise<{ success: boolean; message?: string; error?: string; id?: string }> {
   if (!params.to || !params.to.includes('@')) {
     return { success: false, error: 'মেম্বারের কোনো বৈধ ইমেইল এড্রেস নেই।' };
   }
@@ -139,20 +140,117 @@ export async function sendMemberDailyMessUpdate(params: {
         messId: params.messId,
         memberId: params.memberId,
         date: params.date,
+        messName: params.messName,
       }),
     });
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      console.warn('Failed to send daily mess update email:', data);
+      console.warn(`[Mess Update Email] Failed for ${params.userName} (${params.to}):`, data?.error || res.statusText);
       return { success: false, error: data.error || 'ইমেইল পাঠানো সম্ভব হয়নি।' };
     }
 
-    return { success: !!data.success, message: data.message };
+    return { success: !!data.success, message: data.message, id: data.id };
   } catch (err: any) {
-    console.error('Network error calling /api/send-mess-update:', err);
+    console.error(`[Mess Update Email] Network error for ${params.userName} (${params.to}):`, err);
     return { success: false, error: err?.message || 'নেটওয়ার্ক সমস্যার কারণে ইমেইল পাঠানো যায়নি।' };
   }
+}
+
+/**
+ * Send Automated Member-Specific Daily Mess Update to Multiple Members
+ *
+ * Implements:
+ * 1. Batch Delay / Rate Limiting: 300ms sequential delay between iterations (avoids Resend max 2-3 req/s limit)
+ * 2. Safe Loop Execution: Independent try...catch per member so failure of one never terminates the loop
+ * 3. Detailed Console Log: Prints complete list of sent and failed recipients
+ */
+export async function sendBatchMemberDailyMessUpdates(
+  membersList: Array<{
+    to?: string;
+    userName: string;
+    dailyMeals: number | string;
+    totalDeposit: number | string;
+    currentBalance: number | string;
+    messId?: string;
+    memberId?: string;
+    date?: string;
+    messName?: string;
+  }>
+): Promise<{
+  total: number;
+  sentCount: number;
+  failedCount: number;
+  successful: Array<{ name: string; email: string }>;
+  failed: Array<{ name: string; email: string; error: string }>;
+}> {
+  const successful: Array<{ name: string; email: string }> = [];
+  const failed: Array<{ name: string; email: string; error: string }> = [];
+
+  console.log(`[Batch Email Execution] Starting sequential email dispatch for ${membersList.length} members with 300ms delay...`);
+
+  for (let i = 0; i < membersList.length; i++) {
+    const member = membersList[i];
+    const memberName = member.userName || 'সদস্য';
+    const targetEmail = (member.to || '').trim();
+
+    if (!targetEmail || !targetEmail.includes('@')) {
+      console.warn(`[Batch Email] ⚠️ Skipped member: "${memberName}" (No valid email)`);
+      failed.push({
+        name: memberName,
+        email: targetEmail || 'none',
+        error: 'বৈধ ইমেইল এড্রেস নেই',
+      });
+      continue;
+    }
+
+    // Safe Loop Execution: Independent try-catch per member
+    try {
+      console.log(`[Batch Email] (${i + 1}/${membersList.length}) Sending to: ${memberName} (${targetEmail})...`);
+
+      const result = await sendMemberDailyMessUpdate(member);
+
+      if (result.success) {
+        successful.push({ name: memberName, email: targetEmail });
+        console.log(`[Batch Email] ✅ (${i + 1}/${membersList.length}) Sent successfully: ${memberName} (${targetEmail})`);
+      } else {
+        failed.push({
+          name: memberName,
+          email: targetEmail,
+          error: result.error || 'ইমেইল সেন্ড ব্যর্থ হয়েছে',
+        });
+        console.error(`[Batch Email] ❌ (${i + 1}/${membersList.length}) Failed for: ${memberName} (${targetEmail}):`, result.error);
+      }
+    } catch (memberErr: any) {
+      failed.push({
+        name: memberName,
+        email: targetEmail,
+        error: memberErr?.message || 'অপ্রত্যাশিত নেটওয়ার্ক এরর',
+      });
+      console.error(`[Batch Email] ❌ (${i + 1}/${membersList.length}) Exception for ${memberName} (${targetEmail}):`, memberErr?.message || memberErr);
+    }
+
+    // Batch Delay / Rate Limiting: 300ms pause between member calls
+    if (i < membersList.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+  }
+
+  console.log(`[Batch Email Report] Processed: ${membersList.length} | Succeeded: ${successful.length} | Failed: ${failed.length}`);
+  if (successful.length > 0) {
+    console.log('[Batch Email Successful Members]:', successful.map(s => `${s.name} <${s.email}>`).join(', '));
+  }
+  if (failed.length > 0) {
+    console.warn('[Batch Email Failed Members]:', failed);
+  }
+
+  return {
+    total: membersList.length,
+    sentCount: successful.length,
+    failedCount: failed.length,
+    successful,
+    failed,
+  };
 }
 
 /**
