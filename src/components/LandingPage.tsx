@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { User } from 'firebase/auth';
+import { HeroBannerCarousel } from './HeroBannerCarousel';
 
 interface LandingPageProps {
   user: { uid: string; email?: string | null; displayName?: string | null; photoURL?: string | null } | User | null;
@@ -173,46 +174,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </div>
 
-          <div aria-hidden="true">
-            <div className="hero2" style={{ margin: 0 }}>
-              <small>Mess Balance · sample preview</small>
-              <div className="big" style={{ fontSize: '40px' }}>৳3,240</div>
-              <div className="tri">
-                <div>
-                  <small>Deposit</small>
-                  <b>৳14,000</b>
-                </div>
-                <div>
-                  <small>Total Cost</small>
-                  <b>৳10,760</b>
-                </div>
-                <div>
-                  <small>Meal Rate</small>
-                  <b>56.04৳</b>
-                </div>
-              </div>
-            </div>
-
-            <div className="card" style={{ margin: '12px 0 0' }}>
-              <div className="row" style={{ border: 0, padding: '6px 0' }}>
-                <span className="av">R</span>
-                <div className="g1">
-                  <b>Rahim</b>
-                  <br />
-                  <small>Meals 42 · Deposit ৳3,000</small>
-                </div>
-                <b className="ok">৳646</b>
-              </div>
-              <div className="row" style={{ padding: '6px 0' }}>
-                <span className="av">K</span>
-                <div className="g1">
-                  <b>Karim</b>
-                  <br />
-                  <small>Meals 51 · Deposit ৳2,500</small>
-                </div>
-                <b className="bad">−৳358</b>
-              </div>
-            </div>
+          <div className="w-full">
+            <HeroBannerCarousel onAction={handleAuthAction} />
           </div>
         </section>
 

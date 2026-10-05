@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
 import { db } from '../../src/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 
 /**
  * Controller: POST /api/auth/change-password
@@ -34,8 +34,24 @@ export async function changePasswordHandler(req: Request, res: Response) {
   }
 
   try {
-    const userDocRef = doc(db, 'users', userUid || userEmail);
-    const snap = await getDoc(userDocRef);
+    let userDocRef = doc(db, 'users', userUid || userEmail);
+    let snap = await getDoc(userDocRef);
+
+    if (!snap.exists()) {
+      const usersCol = collection(db, 'users');
+      let q = userUid ? query(usersCol, where('uid', '==', userUid)) : null;
+      let qSnap = q ? await getDocs(q) : null;
+      if (!qSnap || qSnap.empty) {
+        if (userEmail) {
+          const q2 = query(usersCol, where('email', '==', userEmail));
+          qSnap = await getDocs(q2);
+        }
+      }
+      if (qSnap && !qSnap.empty) {
+        userDocRef = qSnap.docs[0].ref;
+        snap = qSnap.docs[0];
+      }
+    }
 
     if (!snap.exists()) {
       return res.status(404).json({

@@ -187,7 +187,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         setMessage({ type: 'ok', text: `Success! Welcome, ${res.user.displayName || 'User'}. Redirecting…` });
         showToast(`স্বাগতম, ${res.user.displayName || 'ব্যবহারকারী'}`);
         setTimeout(() => {
-          onNavigate('/app');
+          onNavigate('/dashboard');
         }, 300);
       }
     } catch (err: any) {
@@ -198,65 +198,36 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     }
   };
 
-  // Email/Password Login
+  // Email/Username + Password Login
   const handleEmailLogin = async () => {
-    const cleanEmail = email.trim();
-    if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
-      setErrors((prev) => ({ ...prev, email: 'Enter a valid email address.' }));
+    const cleanInput = email.trim();
+    if (!cleanInput) {
+      setErrors((prev) => ({ ...prev, email: 'ইমেইল অথবা ইউজারনেম দিন (Enter email or username).' }));
       return;
     }
     if (!password) {
-      setErrors((prev) => ({ ...prev, password: 'Enter your password.' }));
+      setErrors((prev) => ({ ...prev, password: 'পাসওয়ার্ড দিন (Enter your password).' }));
       return;
     }
 
     setLoading(true);
     setMessage(null);
     try {
-      // Set persistence according to rememberMe
-      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
-      const res = await signInWithEmailAndPassword(auth, cleanEmail, password);
-      if (res.user) {
-        const appUser = {
-          uid: res.user.uid,
-          email: res.user.email,
-          displayName: res.user.displayName,
-          photoURL: res.user.photoURL,
-        };
-        try {
-          localStorage.setItem('khaonkhata_auth_user', JSON.stringify(appUser));
-        } catch {
-          // ignore
-        }
-        if (onUserAuthenticated) {
-          onUserAuthenticated(appUser);
-        }
-        setMessage({ type: 'ok', text: 'Success! Logging in…' });
-        showToast(`স্বাগতম, ${res.user.displayName || 'ব্যবহারকারী'}`);
-        setTimeout(() => {
-          onNavigate('/app');
-        }, 200);
-      }
-    } catch (err: any) {
-      console.warn('Firebase email login failed, checking reset password in database...', err?.code);
-
-      // Check if user has an updated password from OTP reset flow
+      const isEmail = cleanInput.includes('@') && cleanInput.includes('.');
       let loggedIn = false;
-      try {
-        const verifyRes = await fetch('/api/auth/login-with-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: cleanEmail, password }),
-        });
-        if (verifyRes.ok) {
-          const verifyData = await verifyRes.json();
-          if (verifyData.success && verifyData.user) {
+
+      // 1. If standard email format, try Firebase Auth first
+      if (isEmail) {
+        try {
+          await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+          const res = await signInWithEmailAndPassword(auth, cleanInput, password);
+          if (res.user) {
             loggedIn = true;
             const appUser = {
-              uid: verifyData.user.uid,
-              email: verifyData.user.email,
-              displayName: verifyData.user.name,
-              photoURL: verifyData.user.photoURL,
+              uid: res.user.uid,
+              email: res.user.email,
+              displayName: res.user.displayName,
+              photoURL: res.user.photoURL,
             };
             try {
               localStorage.setItem('khaonkhata_auth_user', JSON.stringify(appUser));
@@ -267,20 +238,65 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               onUserAuthenticated(appUser);
             }
             setMessage({ type: 'ok', text: 'Success! Logging in…' });
-            showToast(`স্বাগতম, ${verifyData.user.name || 'ব্যবহারকারী'}`);
+            showToast(`স্বাগতম, ${res.user.displayName || 'ব্যবহারকারী'}`);
             setTimeout(() => {
-              onNavigate('/app');
+              onNavigate('/dashboard');
             }, 200);
             return;
           }
+        } catch (firebaseErr: any) {
+          console.warn('Firebase email auth skipped or failed, checking database credentials...', firebaseErr?.code);
+        }
+      }
+
+      // 2. Database Hashed Password / Username / Temporary Credentials verification
+      try {
+        const verifyRes = await fetch('/api/auth/login-with-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: cleanInput,
+            username: cleanInput,
+            password,
+          }),
+        });
+
+        const verifyData = await verifyRes.json();
+        if (verifyRes.ok && verifyData.success && verifyData.user) {
+          loggedIn = true;
+          const appUser = {
+            uid: verifyData.user.uid,
+            email: verifyData.user.email,
+            displayName: verifyData.user.name,
+            photoURL: verifyData.user.photoURL,
+          };
+          try {
+            localStorage.setItem('khaonkhata_auth_user', JSON.stringify(appUser));
+          } catch {
+            // ignore
+          }
+          if (onUserAuthenticated) {
+            onUserAuthenticated(appUser);
+          }
+          setMessage({ type: 'ok', text: 'Success! Logging in…' });
+          showToast(`স্বাগতম, ${verifyData.user.name || 'সদস্য'}`);
+          setTimeout(() => {
+            onNavigate('/dashboard');
+          }, 200);
+          return;
+        } else if (verifyData.error) {
+          setMessage({ type: 'error', text: verifyData.error });
+          return;
         }
       } catch (checkErr) {
-        console.warn('Fallback login check failed:', checkErr);
+        console.warn('Backend login verification failed:', checkErr);
       }
 
       if (!loggedIn) {
-        console.error('Email login error:', err);
-        setMessage({ type: 'error', text: getFirebaseErrorMessage(err) });
+        setMessage({
+          type: 'error',
+          text: 'লগইন ব্যর্থ হয়েছে। অনুগ্রহ করে সঠিক ইমেইল/ইউজারনেম ও পাসওয়ার্ড প্রদান করুন।',
+        });
       }
     } finally {
       setLoading(false);
@@ -337,7 +353,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
         setMessage({ type: 'ok', text: 'Account created! Redirecting to dashboard…' });
         showToast(`স্বাগতম, ${cleanName}! অ্যাকাউন্ট তৈরি সফল হয়েছে।`);
         setTimeout(() => {
-          onNavigate('/app');
+          onNavigate('/dashboard');
         }, 300);
       }
     } catch (err: any) {
@@ -690,7 +706,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
               <span>Continue with Google</span>
             </button>
 
-            <div className="auth-or">or use your email</div>
+            <div className="auth-or">{mode === 'signup' ? 'or use your email' : 'or use email / username'}</div>
 
             {/* Email/Password Form */}
             <form id="form" noValidate onSubmit={handleSubmit}>
@@ -719,14 +735,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                 </div>
               </div>
 
-              {/* Email Address */}
+              {/* Email / Username Address */}
               <div className={`auth-f ${errors.email ? 'err' : ''}`} id="fe">
                 <input
                   id="email"
-                  type="email"
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder="Email address"
+                  type={mode === 'signup' ? 'email' : 'text'}
+                  autoComplete={mode === 'signup' ? 'email' : 'username'}
+                  inputMode={mode === 'signup' ? 'email' : 'text'}
+                  placeholder={mode === 'signup' ? 'Email address' : 'Email or Username (ইমেইল বা ইউজারনেম)'}
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
@@ -735,7 +751,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   aria-describedby="email-e"
                   aria-invalid={!!errors.email}
                 />
-                <label htmlFor="email">Email address</label>
+                <label htmlFor="email">{mode === 'signup' ? 'Email address' : 'Email or Username'}</label>
               </div>
               <div className="auth-er" id="email-e" aria-live="polite">
                 {errors.email}

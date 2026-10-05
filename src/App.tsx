@@ -7,6 +7,7 @@ import {
   collection,
   query,
   where,
+  limit,
   getDocs,
   onSnapshot,
   arrayUnion,
@@ -430,7 +431,7 @@ export default function App() {
       // ignore
     }
     syncUserProfile(authenticatedUser);
-    navigate('/app');
+    navigate('/dashboard');
   };
 
   // Listen to Auth State (Firebase Auth & Custom OTP Hashed Session)
@@ -525,7 +526,17 @@ export default function App() {
           });
         }
 
-        // If user profile has joinedMesses, include them too
+        // If user profile has currentMessId or joinedMesses, include them too
+        if (profile?.currentMessId && !list.some(x => x.id === profile.currentMessId)) {
+          try {
+            const s = await getDoc(doc(db, 'messes', profile.currentMessId));
+            if (s.exists()) {
+              const d = s.data();
+              list.push({ id: s.id, name: d.mess || d.name, mgrEmail: d.mgrEmail });
+            }
+          } catch (_) {}
+        }
+
         if (profile?.joinedMesses) {
           for (const mId of profile.joinedMesses) {
             if (!list.some(x => x.id === mId)) {
@@ -538,6 +549,27 @@ export default function App() {
               } catch (_) {}
             }
           }
+        }
+
+        // Broad fallback: if list is still empty, scan messes to match by member UID, email or name
+        if (list.length === 0) {
+          try {
+            const allMessesSnap = await getDocs(query(collection(db, 'messes'), limit(25)));
+            allMessesSnap.forEach(mDoc => {
+              const d = mDoc.data();
+              const membersList = (d.members || []) as Member[];
+              const isMember = membersList.some(
+                m =>
+                  (m.uid && m.uid === user.uid) ||
+                  (m.id && m.id === user.uid) ||
+                  (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase()) ||
+                  (m.name && user.displayName && m.name.toLowerCase() === user.displayName.toLowerCase())
+              );
+              if (isMember && !list.some(x => x.id === mDoc.id)) {
+                list.push({ id: mDoc.id, name: d.mess || d.name, mgrEmail: d.mgrEmail });
+              }
+            });
+          } catch (_) {}
         }
 
         setUserMesses(list);
@@ -828,9 +860,16 @@ export default function App() {
 
   const currentMember = useMemo(() => {
     if (!user || !messState) return null;
+    const userEmailLower = user.email?.toLowerCase();
+    const userDisplayNameLower = user.displayName?.toLowerCase();
     return (
       messState.members.find(
-        m => (m.uid && m.uid === user.uid) || (m.email && m.email.toLowerCase() === user.email?.toLowerCase())
+        m =>
+          (m.uid && m.uid === user.uid) ||
+          (m.id && m.id === user.uid) ||
+          (m.email && userEmailLower && m.email.toLowerCase() === userEmailLower) ||
+          (m.email && userEmailLower && m.email.toLowerCase().replace(/@.*$/, '') === userEmailLower.replace(/@.*$/, '')) ||
+          (m.name && userDisplayNameLower && m.name.toLowerCase() === userDisplayNameLower)
       ) || messState.members[0] || null
     );
   }, [user, messState]);

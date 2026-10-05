@@ -1877,3 +1877,12 @@ input:focus, select:focus, textarea:focus {
     display: none;
   }
 }
+
+@keyframes carouselProgress {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}

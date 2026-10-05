@@ -29,13 +29,32 @@ export async function loginWithPasswordHandler(req: Request, res: Response) {
   try {
     const usersCol = collection(db, 'users');
 
-    // Query by email first
+    // 1. Query by exact email
     let q = query(usersCol, where('email', '==', cleanInput));
     let snap = await getDocs(q);
 
-    // If not found by email, try query by username
+    // 2. Query by exact username
     if (snap.empty) {
       q = query(usersCol, where('username', '==', cleanInput));
+      snap = await getDocs(q);
+    }
+
+    // 3. If entered username without domain, query by generated domain email
+    if (snap.empty && !cleanInput.includes('@')) {
+      q = query(usersCol, where('email', '==', `${cleanInput}@khaonkhata.online`));
+      snap = await getDocs(q);
+    }
+
+    // 4. If entered generated domain email, query by extracted username
+    if (snap.empty && cleanInput.includes('@khaonkhata.online')) {
+      const uname = cleanInput.replace('@khaonkhata.online', '');
+      q = query(usersCol, where('username', '==', uname));
+      snap = await getDocs(q);
+    }
+
+    // 5. Query by phone number if numeric
+    if (snap.empty && /^[0-9+]+$/.test(cleanInput)) {
+      q = query(usersCol, where('phone', '==', cleanInput));
       snap = await getDocs(q);
     }
 
