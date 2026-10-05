@@ -7,6 +7,9 @@ export interface Member {
   room?: string;
   join?: string;
   photoURL?: string;
+  tempPassword?: string;
+  isArchived?: boolean;
+  archivedAt?: string;
 }
 
 export interface Deposit {
@@ -121,6 +124,7 @@ export interface MessState {
   mgrUid: string;
   mgrEmail: string;
   members: Member[];
+  archivedMembers?: Member[];
   memberEmails?: string[];
   deposits: Deposit[];
   bazar: BazarItem[];
@@ -149,7 +153,7 @@ export interface UserProfile {
 }
 
 export interface EmailPayload {
-  type: 'meal_update' | 'deposit_confirmation';
+  type: 'meal_update' | 'deposit_confirmation' | 'welcome_member';
   to: string;
   memberName: string;
   messName: string;
@@ -172,6 +176,11 @@ export interface EmailPayload {
     trxId?: string;
     note?: string;
     status?: string;
+
+    // Welcome Member data
+    tempPassword?: string;
+    loginUrl?: string;
+    phone?: string;
   };
 }
 

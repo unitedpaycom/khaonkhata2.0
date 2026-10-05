@@ -81,6 +81,7 @@ import {
   sendDepositConfirmationEmail,
   sendMemberDailyMessUpdate,
   sendBatchMemberDailyMessUpdates,
+  changeUserPassword,
 } from './utils/emailClient';
 import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
@@ -182,10 +183,18 @@ export default function App() {
   }, []);
 
   // Meal Tab specifics
-  const [mealSubTab, setMealSubTab] = useState<'add' | 'req' | 'chart'>('add');
+  const [mealSubTab, setMealSubTab] = useState<'add' | 'req' | 'chart' | 'history'>('add');
   const [mealDate, setMealDate] = useState<string>(TD);
   const [mealWho, setMealWho] = useState<string>('all');
   const [mealDraft, setMealDraft] = useState<Record<string, MealSlot>>({});
+
+  // Change Password Modal & Form State
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [changePassOld, setChangePassOld] = useState('');
+  const [changePassNew, setChangePassNew] = useState('');
+  const [changePassConfirm, setChangePassConfirm] = useState('');
+  const [changePassLoading, setChangePassLoading] = useState(false);
+  const [changePassMsg, setChangePassMsg] = useState<{ type: 'ok' | 'bad'; text: string } | null>(null);
 
   // Cost Tab specifics
   const [costSubTab, setCostSubTab] = useState<'meal' | 'other'>('meal');
@@ -1026,8 +1035,8 @@ export default function App() {
     return true;
   };
 
-  // Add Member
-  const handleAddMember = async (newMember: Member) => {
+  // Add Member with credentials & initial deposit support
+  const handleAddMember = async (newMember: Member, initialDeposit?: number) => {
     if (!messState) return;
 
     const cleanEmail = newMember.email?.toLowerCase();
@@ -1042,10 +1051,23 @@ export default function App() {
       )
     );
 
+    let nextDeposits = messState.deposits || [];
+    if (initialDeposit && initialDeposit > 0) {
+      const initDep: Deposit = {
+        id: 'd_' + uid(),
+        m: newMember.id,
+        amt: initialDeposit,
+        date: newMember.join || TD,
+        note: 'প্রাথমিক মেস জমা (Initial Deposit)',
+      };
+      nextDeposits = [initDep, ...nextDeposits];
+    }
+
     const nextState: MessState = {
       ...messState,
       members: nextMembers,
       memberEmails: allEmails,
+      deposits: nextDeposits,
     };
 
     await saveStateToFirestore(nextState, `সদস্য "${newMember.name}" যোগ করা হয়েছে!`);
@@ -1065,6 +1087,129 @@ export default function App() {
       } catch (err) {
         console.error('Error linking mess to user profile:', err);
       }
+    }
+  };
+
+  // Archive / Delete Member from Active List
+  const handleArchiveMember = async (targetMember: Member) => {
+    if (!checkManagerGuard() || !messState) return;
+    if (targetMember.id === messState.mgr) {
+      showToast('ম্যানেজার নিজেকে মুছে ফেলতে পারবেন না');
+      return;
+    }
+
+    const archivedMember: Member = {
+      ...targetMember,
+      isArchived: true,
+      archivedAt: new Date().toISOString(),
+    };
+
+    const nextActiveMembers = messState.members.filter(m => m.id !== targetMember.id);
+    const nextArchivedMembers = [
+      archivedMember,
+      ...(messState.archivedMembers || []).filter(m => m.id !== targetMember.id),
+    ];
+
+    // Remove email from memberEmails so they lose access to active mess
+    const targetEmail = targetMember.email?.toLowerCase();
+    const nextEmails = (messState.memberEmails || []).filter(e => e.toLowerCase() !== targetEmail);
+
+    const nextState: MessState = {
+      ...messState,
+      members: nextActiveMembers,
+      archivedMembers: nextArchivedMembers,
+      memberEmails: nextEmails,
+    };
+
+    await saveStateToFirestore(nextState, `"${targetMember.name}"-কে মেস থেকে সফলভাবে রিমুভ ও আর্কাইভ করা হয়েছে`);
+
+    // Disable user document in Firestore if exists so they cannot log in
+    if (targetMember.uid) {
+      try {
+        await setDoc(
+          doc(db, 'users', targetMember.uid),
+          {
+            isArchived: true,
+            status: 'archived',
+            archivedMessId: messState.id,
+            archivedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      } catch (err) {
+        console.warn('Error archiving user doc in users collection:', err);
+      }
+    }
+
+    if (detailMemberId === targetMember.id) {
+      setTab('members');
+      setDetailMemberId('');
+    }
+  };
+
+  // Delete all meals for a specific date
+  const handleDeleteDateMeals = async (targetDate: string) => {
+    if (!checkManagerGuard() || !messState) return;
+    if (!messState.meals || !messState.meals[targetDate]) {
+      showToast(`${targetDate} তারিখে কোনো মিল রেকর্ড নেই`);
+      return;
+    }
+
+    const nextMeals = { ...(messState.meals || {}) };
+    delete nextMeals[targetDate];
+
+    const notif = await createNotification({
+      type: 'meal',
+      title: `🗑️ মিল মুছে ফেলা: ${targetDate}`,
+      body: `ম্যানেজার ${targetDate} তারিখের সকল মিল রেকর্ড মুছে ফেলেছেন`,
+      actorId: user?.uid,
+      actorName: user?.displayName || 'ম্যানেজার',
+    });
+
+    const nextState: MessState = {
+      ...messState,
+      meals: nextMeals,
+      notifications: notif
+        ? [notif, ...(messState.notifications || [])].slice(0, 100)
+        : messState.notifications,
+    };
+
+    await saveStateToFirestore(nextState, `${targetDate} তারিখের মিল সম্পূর্ণ মুছে ফেলা হয়েছে!`);
+
+    // Clear meal draft if currently on that date
+    if (mealDate === targetDate) {
+      const clearedDraft: Record<string, MealSlot> = {};
+      messState.members.forEach(m => {
+        clearedDraft[m.id] = { b: 0, l: 0, d: 0 };
+      });
+      setMealDraft(clearedDraft);
+    }
+  };
+
+  // Remove meal for a single member on a target date
+  const handleRemoveMemberMeal = async (memberId: string, targetDate: string) => {
+    if (!checkManagerGuard() || !messState) return;
+    const nextMeals = { ...(messState.meals || {}) };
+    if (nextMeals[targetDate]) {
+      const nextDay = { ...nextMeals[targetDate] };
+      delete nextDay[memberId];
+      if (Object.keys(nextDay).length === 0) {
+        delete nextMeals[targetDate];
+      } else {
+        nextMeals[targetDate] = nextDay;
+      }
+
+      const mem = messState.members.find(m => m.id === memberId);
+      const nextState: MessState = {
+        ...messState,
+        meals: nextMeals,
+      };
+
+      await saveStateToFirestore(nextState, `${mem?.name || 'সদস্য'}-এর ${targetDate} তারিখের মিল মুছে ফেলা হয়েছে!`);
+      setMealDraft(prev => ({
+        ...prev,
+        [memberId]: { b: 0, l: 0, d: 0 },
+      }));
     }
   };
 
@@ -2727,13 +2872,13 @@ export default function App() {
         {tab === 'meal' && (
           <div className="pg space-y-4">
             {/* Sub Tabs */}
-            <div className="stabs">
+            <div className="stabs flex-wrap">
               {isManager && (
                 <button
                   className={mealSubTab === 'add' ? 'on' : ''}
                   onClick={() => setMealSubTab('add')}
                 >
-                  Add Meal
+                  মিল এন্ট্রি / এডিট
                 </button>
               )}
               <button
@@ -2748,9 +2893,17 @@ export default function App() {
               >
                 Chart
               </button>
+              {isManager && (
+                <button
+                  className={mealSubTab === 'history' ? 'on' : ''}
+                  onClick={() => setMealSubTab('history')}
+                >
+                  📅 মিল হিস্ট্রি ও মুছুন
+                </button>
+              )}
             </div>
 
-            {/* TAB: ADD MEAL (Manager) */}
+            {/* TAB: ADD / EDIT MEAL (Manager) */}
             {mealSubTab === 'add' && (
               <>
                 <label>মেম্বার সিলেক্ট করুন</label>
@@ -2766,12 +2919,57 @@ export default function App() {
                   ))}
                 </select>
 
-                <label>মিলের তারিখ সিলেক্ট করুন</label>
+                <div className="flex justify-between items-center mt-2">
+                  <label className="m-0">মিলের তারিখ সিলেক্ট করুন</label>
+                  {messState.meals?.[mealDate] && (
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                      ✓ এই তারিখে মিল সংরক্ষিত আছে
+                    </span>
+                  )}
+                </div>
                 <input
                   type="date"
                   value={mealDate}
                   onChange={e => setMealDate(e.target.value)}
                 />
+
+                {/* Date meal status banner & delete button */}
+                {(() => {
+                  const existingDay = messState.meals?.[mealDate];
+                  const existingTotal = existingDay
+                    ? Object.values(existingDay).reduce((acc, s) => acc + mt(s), 0)
+                    : 0;
+                  if (existingTotal > 0) {
+                    return (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mt-2">
+                        <div>
+                          <b className="text-amber-900 dark:text-amber-100 text-xs">
+                            📅 {mealDate} তারিখে মিল রেকর্ড রয়েছে (মোট {existingTotal}টি মিল)
+                          </b>
+                          <p className="text-[11px] text-amber-700 dark:text-amber-300 m-0">
+                            নিচে সংখ্যা পরিবর্তন করে 'Save Realtime Meals' দিন অথবা পুরো দিনটি মুছে ফেলুন।
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn d s text-xs !py-1 !px-2.5 whitespace-nowrap cursor-pointer"
+                          onClick={() => {
+                            setModalConfig({
+                              isOpen: true,
+                              title: 'মিলের তারিখ মুছে ফেলা',
+                              message: `আপনি কি নিশ্চিতভাবে ${mealDate} তারিখের সকল মেম্বারের মিল রেকর্ড মুছে ফেলতে চান? এটি মোছার সাথে সাথে মোট মিল ও সদস্যদের ব্যালেন্স স্বয়ংক্রিয়ভাবে রিক্যালকুলেট হবে।`,
+                              confirmText: 'সম্পূর্ণ মুছুন',
+                              onConfirm: () => handleDeleteDateMeals(mealDate),
+                            });
+                          }}
+                        >
+                          🗑️ এই দিনের সব মিল মুছুন
+                        </button>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
 
                 {isMonthLocked && (
                   <p className="bad text-sm font-semibold mt-2">
@@ -2789,6 +2987,7 @@ export default function App() {
                     .map(m => {
                       const slot = mealDraft[m.id] || { b: 0, l: 0, d: 0 };
                       const totalSlot = mt(slot);
+                      const hasExistingInDb = messState.meals?.[mealDate]?.[m.id] && mt(messState.meals[mealDate][m.id]) > 0;
                       return (
                         <div key={m.id} className="card mc">
                           <h3>
@@ -2797,7 +2996,42 @@ export default function App() {
                               <span>{m.name}</span>
                               {slot.rq ? <span className="rq">Request</span> : null}
                             </span>
-                            <span>Total: {totalSlot}</span>
+                            <div className="flex items-center gap-2">
+                              <span>Total: {totalSlot}</span>
+                              {totalSlot > 0 && (
+                                <button
+                                  type="button"
+                                  className="text-[11px] text-red-600 dark:text-red-400 hover:underline cursor-pointer bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded border border-red-200 dark:border-red-900"
+                                  onClick={() => {
+                                    setMealDraft(prev => ({
+                                      ...prev,
+                                      [m.id]: { b: 0, l: 0, d: 0 },
+                                    }));
+                                  }}
+                                  title="এই মেম্বারের মিল শূন্য করুন"
+                                >
+                                  রিসেট (0)
+                                </button>
+                              )}
+                              {hasExistingInDb && (
+                                <button
+                                  type="button"
+                                  className="text-[11px] text-red-700 dark:text-red-300 hover:underline cursor-pointer bg-red-100 dark:bg-red-900/40 px-2 py-0.5 rounded"
+                                  onClick={() => {
+                                    setModalConfig({
+                                      isOpen: true,
+                                      title: 'মেম্বারের মিল মুছুন',
+                                      message: `${m.name}-এর ${mealDate} তারিখের মিল ডাটাবেজ থেকে মুছে ফেলতে চান?`,
+                                      confirmText: 'মুছুন',
+                                      onConfirm: () => handleRemoveMemberMeal(m.id, mealDate),
+                                    });
+                                  }}
+                                  title="ডাটাবেজ থেকে সরাসরি এন্ট্রি মুছুন"
+                                >
+                                  🗑️ রিমুভ
+                                </button>
+                              )}
+                            </div>
                           </h3>
 
                           <div className="mr">
@@ -3108,6 +3342,101 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+
+            {/* TAB: MEAL HISTORY & DELETE (Manager) */}
+            {mealSubTab === 'history' && (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="!mb-0.5">মাসের মিল হিস্ট্রি ও রেকর্ড মুছুন</h3>
+                    <p className="text-xs text-[var(--mut)] m-0">
+                      যেকোনো অতীত দিনের মিল এডিট করুন বা সম্পূর্ণ রেকর্ড মুছে ফেলুন
+                    </p>
+                  </div>
+                  <span className="tag font-bold">
+                    {Object.keys(messState.meals || {}).filter(k => k.startsWith(activeYM)).length} দিন রেকর্ড রয়েছে
+                  </span>
+                </div>
+
+                {(() => {
+                  const recordedDates = Object.keys(messState.meals || {})
+                    .filter(k => k.startsWith(activeYM))
+                    .sort()
+                    .reverse();
+
+                  if (recordedDates.length === 0) {
+                    return (
+                      <div className="p-8 text-center text-sm text-[var(--mut)] bg-[var(--bg)] border border-[var(--line)] rounded-xl">
+                        এই মাসে এখনো কোনো মিল এন্ট্রি নেই
+                      </div>
+                    );
+                  }
+
+                  return recordedDates.map(dateKey => {
+                    const daySlots = messState.meals[dateKey] || {};
+                    const totalDay = Object.values(daySlots).reduce((acc, s) => acc + mt(s), 0);
+                    const memberNames = Object.entries(daySlots)
+                      .filter(([_, s]) => mt(s) > 0)
+                      .map(([memId, s]) => {
+                        const member =
+                          messState.members.find(m => m.id === memId) ||
+                          (messState.archivedMembers || []).find(m => m.id === memId);
+                        return `${member?.name || 'মেম্বার'}: ${mt(s)}`;
+                      });
+
+                    return (
+                      <div
+                        key={dateKey}
+                        className="card !p-4 hover:border-[var(--pri)] flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-colors"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <b className="text-base text-[var(--ink)]">📅 {dateKey}</b>
+                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200">
+                              মোট {totalDay} টি মিল
+                            </span>
+                          </div>
+                          <p className="text-xs text-[var(--mut)] m-0 line-clamp-1">
+                            {memberNames.length > 0 ? memberNames.join(', ') : 'কোনো সদস্য মিল খায়নি'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="btn s font-bold flex items-center gap-1 cursor-pointer"
+                            onClick={() => {
+                              setMealDate(dateKey);
+                              setMealSubTab('add');
+                              showToast(`${dateKey} তারিখটি এডিটের জন্য লোড হয়েছে`);
+                            }}
+                          >
+                            <span>✏️</span>
+                            <span>এডিট করুন</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn d s font-bold flex items-center gap-1 cursor-pointer"
+                            onClick={() => {
+                              setModalConfig({
+                                isOpen: true,
+                                title: 'মিল সম্পূর্ণ মুছে ফেলবেন?',
+                                message: `আপনি কি নিশ্চিতভাবে ${dateKey} তারিখের সকল মেম্বারের মিল মুছে ফেলতে চান? এটি মুছে ফেলার সাথে সাথে মেসের মোট মিল এবং সকল মেম্বারের ব্যালেন্স তৎক্ষণাৎ রিক্যালকুলেট হবে।`,
+                                confirmText: 'সম্পূর্ণ মুছুন',
+                                onConfirm: () => handleDeleteDateMeals(dateKey),
+                              });
+                            }}
+                          >
+                            <span>🗑️</span>
+                            <span>মুছুন</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             )}
           </div>
@@ -3465,18 +3794,75 @@ export default function App() {
                           <br />
                           <small>{m.room || 'Room -'} · {m.email || 'Email নেই'}</small>
                         </div>
-                        <div className="text-right">
-                          <b className={mSummary.bal >= 0 ? 'ok' : 'bad'}>
-                            {tk(mSummary.bal)}
-                          </b>
-                          <br />
-                          <small className="text-[var(--mut)]">বিস্তারিত ›</small>
+                        <div className="flex items-center gap-2">
+                          <div className="text-right">
+                            <b className={mSummary.bal >= 0 ? 'ok' : 'bad'}>
+                              {tk(mSummary.bal)}
+                            </b>
+                            <br />
+                            <small className="text-[var(--mut)]">বিস্তারিত ›</small>
+                          </div>
+                          {isManager && m.id !== messState.mgr && (
+                            <button
+                              type="button"
+                              className="btn d s !py-1 !px-2.5 text-xs font-bold cursor-pointer ml-1"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalConfig({
+                                  isOpen: true,
+                                  title: 'সদস্য মুছে ফেলবেন?',
+                                  message: `আপনি কি "${m.name}"-কে মেস থেকে রিমুভ ও আর্কাইভ করতে চান? ওনার পূর্বের মিল ও জমার রেকর্ড মেসের ইতিহাসে সংরক্ষিত থাকবে, কিন্তু উনি আর অ্যাক্টিভ লিস্টে থাকবেন না এবং লগইন করতে পারবেন না।`,
+                                  confirmText: 'মুছে ফেলুন',
+                                  onConfirm: () => handleArchiveMember(m),
+                                });
+                              }}
+                              title="সদস্য মুছুন / আর্কাইভ করুন"
+                            >
+                              🗑️
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
                   );
                 })}
             </div>
+
+            {/* Archived Members List */}
+            {messState.archivedMembers && messState.archivedMembers.length > 0 && (
+              <div className="card !bg-neutral-50 dark:!bg-neutral-900/40 border border-dashed border-[var(--line)]">
+                <h4 className="text-xs font-bold text-[var(--mut)] uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>📦 আর্কাইভকৃত প্রাক্তন সদস্য ({messState.archivedMembers.length})</span>
+                  <span className="text-[10px] font-normal lowercase">রেকর্ড সংরক্ষিত</span>
+                </h4>
+                <div className="divide-y divide-[var(--line)]">
+                  {messState.archivedMembers.map(am => {
+                    const amSummary = monthSummary?.mm[am.id] || { bal: 0, meals: 0, dep: 0 };
+                    return (
+                      <div key={am.id} className="py-2 flex items-center justify-between text-xs opacity-75">
+                        <div className="flex items-center gap-2">
+                          <span className="av !w-7 !h-7 !text-xs bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
+                            {(am.name[0] || '?').toUpperCase()}
+                          </span>
+                          <div>
+                            <span className="font-semibold text-[var(--ink)]">{am.name}</span>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded ml-1.5 font-bold">
+                              আর্কাইভড
+                            </span>
+                            <p className="text-[10px] text-[var(--mut)] m-0">{am.email || 'Email নেই'}</p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className={amSummary.bal >= 0 ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold'}>
+                            {tk(amSummary.bal)}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -3484,7 +3870,8 @@ export default function App() {
         {tab === 'detail' && detailMemberId && (
           <div className="pg space-y-4">
             {(() => {
-              const mem = messState.members.find(m => m.id === detailMemberId);
+              const mem = messState.members.find(m => m.id === detailMemberId) ||
+                (messState.archivedMembers || []).find(m => m.id === detailMemberId);
               if (!mem) return <p>সদস্য পাওয়া যায়নি</p>;
 
               const mSummary = monthSummary?.mm[mem.id] || {
@@ -3525,6 +3912,11 @@ export default function App() {
                         {mem.id === messState.mgr && (
                           <span className="tag ml-2">Manager</span>
                         )}
+                        {mem.isArchived && (
+                          <span className="tag ml-2 !bg-amber-100 dark:!bg-amber-950 text-amber-800 dark:text-amber-200">
+                            আর্কাইভড
+                          </span>
+                        )}
                         <br />
                         <small>
                           {mem.email || 'Email নেই'} · {mem.room || 'রুম নেই'} · জয়েনিং: {mem.join || '-'}
@@ -3532,7 +3924,32 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="acts !justify-between items-center mt-4 pt-3 border-t border-[var(--line)]">
+                    {/* MANAGER PRIVATE CREDENTIALS DISPLAY */}
+                    {isManager && mem.tempPassword && (
+                      <div className="mt-3 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div className="space-y-0.5">
+                          <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-200 uppercase tracking-wider flex items-center gap-1">
+                            <span>🔑</span>
+                            <span>লগইন ক্রেডেনশিয়াল (ম্যানেজার ভিউ)</span>
+                          </span>
+                          <p className="text-xs text-emerald-950 dark:text-emerald-100 m-0">
+                            লগইন পাসওয়ার্ড: <code className="font-mono font-bold bg-white dark:bg-black/30 px-2 py-0.5 rounded text-emerald-700 dark:text-emerald-300">{mem.tempPassword}</code>
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn s font-bold text-xs py-1 px-3 cursor-pointer"
+                          onClick={() => {
+                            navigator.clipboard.writeText(`মেস লগইন:\nআইডি: ${mem.email || mem.name}\nপাসওয়ার্ড: ${mem.tempPassword}\nলিঙ্ক: https://khaonkhata.online/login`);
+                            showToast('ক্রেডেনশিয়াল কপি হয়েছে!');
+                          }}
+                        >
+                          📋 কপি করুন
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="acts !justify-between items-center mt-4 pt-3 border-t border-[var(--line)] flex-wrap gap-2">
                       <button
                         type="button"
                         className="btn !bg-emerald-600 !text-white hover:!bg-emerald-700 s flex items-center gap-1.5 cursor-pointer font-semibold shadow-xs"
@@ -3544,65 +3961,80 @@ export default function App() {
                         <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'মাসিক হিসাব PDF ডাউনলোড'}</span>
                       </button>
 
-                      {isManager && (
-                        <button
-                          className="btn g s"
-                          onClick={() => {
-                            setModalConfig({
-                              isOpen: true,
-                              title: 'সদস্য এডিট',
-                              fields: [
-                                { k: 'n', l: 'নাম', v: mem.name },
-                                { k: 'e', l: 'ইমেইল (Google Email)', v: mem.email || '' },
-                                { k: 'r', l: 'রুম', v: mem.room || '' },
-                                { k: 'j', l: 'জয়েনিং তারিখ', t: 'date', v: mem.join || TD },
-                              ],
-                              onConfirm: (vals) => {
-                                if (!vals.n?.trim()) return false;
-                                const updatedMembers = messState.members.map(m =>
-                                  m.id === mem.id
-                                    ? {
-                                        ...m,
-                                        name: vals.n.trim(),
-                                        email: vals.e?.trim().toLowerCase() || m.email,
-                                        room: vals.r?.trim(),
-                                        join: vals.j,
-                                      }
-                                    : m
-                                );
-                                const updatedEmails = Array.from(
-                                  new Set([
-                                    ...(messState.memberEmails || []),
-                                    vals.e?.trim().toLowerCase(),
-                                    ...updatedMembers.map(m => m.email?.toLowerCase()).filter(Boolean),
-                                  ].filter(Boolean) as string[])
-                                );
-                                saveStateToFirestore(
-                                  { ...messState, members: updatedMembers, memberEmails: updatedEmails },
-                                  'সদস্য তথ্য আপডেট হয়েছে'
-                                );
-                              },
-                              onDelete: () => {
-                                setModalConfig({
-                                  isOpen: true,
-                                  title: 'নিশ্চিত?',
-                                  message: `${mem.name}-কে মেস থেকে মুছে ফেলবেন?`,
-                                  onConfirm: () => {
-                                    const filtered = messState.members.filter(m => m.id !== mem.id);
-                                    saveStateToFirestore(
-                                      { ...messState, members: filtered },
-                                      'সদস্য মুছে ফেলা হয়েছে'
-                                    );
-                                    setTab('members');
-                                  },
-                                });
-                              },
-                            });
-                          }}
-                        >
-                          Edit / Remove Member
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {isManager && !mem.isArchived && mem.id !== messState.mgr && (
+                          <button
+                            type="button"
+                            className="btn d s font-bold flex items-center gap-1 cursor-pointer"
+                            onClick={() => {
+                              setModalConfig({
+                                isOpen: true,
+                                title: 'সদস্য মুছে ফেলবেন?',
+                                message: `আপনি কি "${mem.name}"-কে মেস থেকে রিমুভ ও আর্কাইভ করতে চান? ওনার পূর্বের মিল ও জমার রেকর্ড সংরক্ষিত থাকবে, কিন্তু উনি আর অ্যাক্টিভ লিস্টে থাকবেন না এবং লগইন করতে পারবেন না।`,
+                                confirmText: 'মুছে ফেলুন',
+                                onConfirm: () => handleArchiveMember(mem),
+                              });
+                            }}
+                          >
+                            <span>🗑️</span>
+                            <span>সদস্য মুছুন</span>
+                          </button>
+                        )}
+
+                        {isManager && (
+                          <button
+                            className="btn g s"
+                            onClick={() => {
+                              setModalConfig({
+                                isOpen: true,
+                                title: 'সদস্য এডিট',
+                                fields: [
+                                  { k: 'n', l: 'নাম', v: mem.name },
+                                  { k: 'e', l: 'ইমেইল (Google Email)', v: mem.email || '' },
+                                  { k: 'r', l: 'রুম', v: mem.room || '' },
+                                  { k: 'j', l: 'জয়েনিং তারিখ', t: 'date', v: mem.join || TD },
+                                ],
+                                onConfirm: (vals) => {
+                                  if (!vals.n?.trim()) return false;
+                                  const updatedMembers = messState.members.map(m =>
+                                    m.id === mem.id
+                                      ? {
+                                          ...m,
+                                          name: vals.n.trim(),
+                                          email: vals.e?.trim().toLowerCase() || m.email,
+                                          room: vals.r?.trim(),
+                                          join: vals.j,
+                                        }
+                                      : m
+                                  );
+                                  const updatedEmails = Array.from(
+                                    new Set([
+                                      ...(messState.memberEmails || []),
+                                      vals.e?.trim().toLowerCase(),
+                                      ...updatedMembers.map(m => m.email?.toLowerCase()).filter(Boolean),
+                                    ].filter(Boolean) as string[])
+                                  );
+                                  saveStateToFirestore(
+                                    { ...messState, members: updatedMembers, memberEmails: updatedEmails },
+                                    'সদস্য তথ্য আপডেট হয়েছে'
+                                  );
+                                },
+                                onDelete: () => {
+                                  setModalConfig({
+                                    isOpen: true,
+                                    title: 'নিশ্চিত?',
+                                    message: `${mem.name}-কে মেস থেকে মুছে ফেলবেন?`,
+                                    confirmText: 'মুছে ফেলুন',
+                                    onConfirm: () => handleArchiveMember(mem),
+                                  });
+                                },
+                              });
+                            }}
+                          >
+                            এডিট করুন
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -4027,6 +4459,132 @@ export default function App() {
                   {isManager ? 'ম্যানেজার' : 'মেম্বার'} · {messState.mess}
                 </span>
               </div>
+            </div>
+
+            {/* Password Management Card */}
+            <div className="card space-y-3">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="!mb-0.5 flex items-center gap-1.5">
+                    <span>🔒</span>
+                    <span>পাসওয়ার্ড পরিবর্তন (Change Password)</span>
+                  </h3>
+                  <p className="text-xs text-[var(--mut)] m-0">
+                    মেম্বার হিসেবে নিজস্ব পছন্দের নতুন পাসওয়ার্ড সেট করুন
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn s font-bold cursor-pointer"
+                  onClick={() => {
+                    setIsChangePasswordOpen(prev => !prev);
+                    setChangePassMsg(null);
+                  }}
+                >
+                  {isChangePasswordOpen ? 'বাতিল' : 'পাসওয়ার্ড পরিবর্তন'}
+                </button>
+              </div>
+
+              {isChangePasswordOpen && (
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!changePassNew || changePassNew.length < 6) {
+                      setChangePassMsg({ type: 'bad', text: 'নতুন পাসওয়ার্ড ন্যূনতম ৬ অক্ষরের হতে হবে।' });
+                      return;
+                    }
+                    if (changePassNew !== changePassConfirm) {
+                      setChangePassMsg({ type: 'bad', text: 'নতুন পাসওয়ার্ড ও কনফার্ম পাসওয়ার্ড মিলছে না।' });
+                      return;
+                    }
+
+                    setChangePassLoading(true);
+                    setChangePassMsg(null);
+                    const res = await changeUserPassword({
+                      uid: user.uid,
+                      email: user.email || undefined,
+                      oldPassword: changePassOld || undefined,
+                      newPassword: changePassNew,
+                    });
+                    setChangePassLoading(false);
+
+                    if (res.success) {
+                      setChangePassMsg({ type: 'ok', text: res.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!' });
+                      showToast('পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে!');
+                      setChangePassOld('');
+                      setChangePassNew('');
+                      setChangePassConfirm('');
+                      setTimeout(() => setIsChangePasswordOpen(false), 2000);
+                    } else {
+                      setChangePassMsg({ type: 'bad', text: res.error || 'পাসওয়ার্ড পরিবর্তন ব্যর্থ হয়েছে।' });
+                    }
+                  }}
+                  className="p-3 bg-[var(--bg)] border border-[var(--line)] rounded-xl space-y-3 mt-3 animate-in fade-in duration-150"
+                >
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--mut)] mb-1">
+                      বর্তমান পাসওয়ার্ড (ঐচ্ছিক)
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="বর্তমান পাসওয়ার্ড দিন"
+                      value={changePassOld}
+                      onChange={e => setChangePassOld(e.target.value)}
+                      className="w-full p-2.5 rounded-lg border border-[var(--line)] bg-[var(--card)] text-sm outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--mut)] mb-1">
+                      নতুন পাসওয়ার্ড <span className="text-[var(--bad)]">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড"
+                      value={changePassNew}
+                      onChange={e => setChangePassNew(e.target.value)}
+                      className="w-full p-2.5 rounded-lg border border-[var(--line)] bg-[var(--card)] text-sm outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-[var(--mut)] mb-1">
+                      নতুন পাসওয়ার্ড নিশ্চিত করুন <span className="text-[var(--bad)]">*</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      placeholder="নতুন পাসওয়ার্ড পুনরায় লিখুন"
+                      value={changePassConfirm}
+                      onChange={e => setChangePassConfirm(e.target.value)}
+                      className="w-full p-2.5 rounded-lg border border-[var(--line)] bg-[var(--card)] text-sm outline-none"
+                    />
+                  </div>
+
+                  {changePassMsg && (
+                    <p className={`text-xs font-semibold p-2.5 rounded-lg m-0 ${changePassMsg.type === 'ok' ? 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200'}`}>
+                      {changePassMsg.text}
+                    </p>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      className="btn g s text-xs"
+                      onClick={() => setIsChangePasswordOpen(false)}
+                      disabled={changePassLoading}
+                    >
+                      বাতিল
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn s font-bold text-xs !bg-emerald-600 text-white hover:!bg-emerald-700 cursor-pointer"
+                      disabled={changePassLoading}
+                    >
+                      {changePassLoading ? 'আপডেট হচ্ছে...' : 'পাসওয়ার্ড সেভ করুন'}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
 
             {/* Mess List & Switcher */}
@@ -4516,12 +5074,13 @@ export default function App() {
         />
       </div>
 
-      {/* Add Member with Email Search Modal */}
+      {/* Add Member with Auto-Credentials & Welcome Email Modal */}
       <AddMemberModal
         isOpen={isAddMemberOpen}
         onClose={() => setIsAddMemberOpen(false)}
         onAddMember={handleAddMember}
         existingEmails={messState.members.map(m => m.email || '').filter(Boolean)}
+        messName={messState.mess}
       />
 
       {/* Global Interactive Modal */}

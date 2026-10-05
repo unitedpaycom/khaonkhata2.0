@@ -5,44 +5,62 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 
 /**
  * Endpoint: POST /api/auth/login-with-password
- * Allows a user to verify credentials against their database-stored hashed password
- * (created or updated during the OTP Password Reset flow).
+ * Allows a user to verify credentials against their database-stored hashed password.
+ * Supports login via Email OR Username.
+ * Checks for archived/disabled status.
  */
 export async function loginWithPasswordHandler(req: Request, res: Response) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed. Only POST is supported.' });
   }
 
-  const { email, password } = req.body || {};
-  const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  const { email, username, password } = req.body || {};
+  const loginInput = typeof email === 'string' ? email.trim() : typeof username === 'string' ? username.trim() : '';
+  const cleanInput = loginInput.toLowerCase();
   const passwordStr = typeof password === 'string' ? password : '';
 
-  if (!cleanEmail || !passwordStr) {
+  if (!cleanInput || !passwordStr) {
     return res.status(400).json({
       success: false,
-      error: 'অনুগ্রহ করে ইমেইল এবং পাসওয়ার্ড দুটোই প্রদান করুন।',
+      error: 'অনুগ্রহ করে ইমেইল / ইউজারনেম এবং পাসওয়ার্ড দুটোই প্রদান করুন।',
     });
   }
 
   try {
     const usersCol = collection(db, 'users');
-    const q = query(usersCol, where('email', '==', cleanEmail));
-    const snap = await getDocs(q);
+
+    // Query by email first
+    let q = query(usersCol, where('email', '==', cleanInput));
+    let snap = await getDocs(q);
+
+    // If not found by email, try query by username
+    if (snap.empty) {
+      q = query(usersCol, where('username', '==', cleanInput));
+      snap = await getDocs(q);
+    }
 
     if (snap.empty) {
       return res.status(404).json({
         success: false,
-        error: 'এই ইমেইলে কোনো ব্যবহারকারী একাউন্ট পাওয়া যায়নি।',
+        error: 'এই ইমেইল বা ইউজারনেমে কোনো ব্যবহারকারী একাউন্ট পাওয়া যায়নি।',
       });
     }
 
     const userDoc = snap.docs[0];
     const userData = userDoc.data();
 
+    // Check if account is archived / disabled by manager
+    if (userData.isArchived === true || userData.status === 'archived') {
+      return res.status(403).json({
+        success: false,
+        error: 'এই মেম্বার অ্যাকাউন্টটি ম্যানেজার দ্বারা নিষ্ক্রিয় (Archived) করা হয়েছে। আপনি আর লগইন করতে পারবেন না।',
+      });
+    }
+
     if (!userData.passwordHash || !userData.salt) {
       return res.status(400).json({
         success: false,
-        error: 'এই অ্যাকাউন্টে রিসেট করা পাসওয়ার্ড নেই। দয়া করে স্ট্যান্ডার্ড লগইন ব্যবহার করুন।',
+        error: 'এই অ্যাকাউন্টে কোনো পাসওয়ার্ড সেট করা নেই। অনুগ্রহ করে গুগল দিয়ে লগইন করুন বা পাসওয়ার্ড রিসেট করুন।',
       });
     }
 
@@ -60,8 +78,9 @@ export async function loginWithPasswordHandler(req: Request, res: Response) {
       user: {
         uid: userData.uid || userDoc.id,
         email: userData.email,
-        name: userData.name || userData.displayName || cleanEmail.split('@')[0],
+        name: userData.name || userData.displayName || cleanInput,
         photoURL: userData.photoURL || null,
+        isTemporaryPassword: !!userData.isTemporaryPassword,
       },
     });
   } catch (error: any) {

@@ -100,6 +100,57 @@ export async function sendDepositConfirmationEmail(params: {
 }
 
 /**
+ * Dispatch Welcome Email with Auto-Generated Credentials & Login Link
+ */
+export async function sendWelcomeMemberEmail(params: {
+  to: string;
+  memberName: string;
+  messName: string;
+  tempPassword?: string;
+  loginUrl?: string;
+}): Promise<{ success: boolean; message?: string; error?: string }> {
+  if (!params.to || !params.to.includes('@')) {
+    return { success: false, error: 'বৈধ ইমেইল এড্রেস নেই' };
+  }
+
+  return dispatchEmailNotification({
+    type: 'welcome_member',
+    to: params.to.trim(),
+    memberName: params.memberName,
+    messName: params.messName,
+    data: {
+      tempPassword: params.tempPassword,
+      loginUrl: params.loginUrl || 'https://khaonkhata.online/login',
+    },
+  });
+}
+
+/**
+ * Change member password from Profile settings
+ */
+export async function changeUserPassword(params: {
+  uid: string;
+  email?: string;
+  oldPassword?: string;
+  newPassword: string;
+}): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { success: false, error: data?.error || 'পাসওয়ার্ড পরিবর্তন ব্যর্থ হয়েছে।' };
+    }
+    return { success: true, message: data?.message || 'পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে।' };
+  } catch (err: any) {
+    return { success: false, error: err?.message || 'নেটওয়ার্ক সমস্যার কারণে পাসওয়ার্ড পরিবর্তন করা যায়নি।' };
+  }
+}
+
+/**
  * Send Automated Member-Specific Daily Mess Update email
  * Calls /api/send-mess-update which uses Resend Dynamic Template alias 'mess-update'
  * from notice@khaonkhata.online.

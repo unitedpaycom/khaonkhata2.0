@@ -9,6 +9,7 @@ import sendMessUpdateHandler from './api/send-mess-update';
 import requestPasswordResetHandler from './api/auth/request-password-reset';
 import verifyAndResetPasswordHandler from './api/auth/verify-and-reset-password';
 import loginWithPasswordHandler from './api/auth/login-with-password';
+import changePasswordHandler from './api/auth/change-password';
 
 dotenv.config();
 
@@ -26,6 +27,7 @@ async function startServer() {
   app.post('/api/auth/request-password-reset', requestPasswordResetHandler);
   app.post('/api/auth/verify-and-reset-password', verifyAndResetPasswordHandler);
   app.post('/api/auth/login-with-password', loginWithPasswordHandler);
+  app.post('/api/auth/change-password', changePasswordHandler);
 
   // Automated Member-Specific Daily Mess Update Flow Route
   app.all('/api/send-mess-update', sendMessUpdateHandler);

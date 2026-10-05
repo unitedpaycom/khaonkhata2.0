@@ -324,6 +324,120 @@ function generateDepositHtml(payload: EmailPayload, targetAppUrl: string): { sub
   return { subject, html };
 }
 
+// Generate HTML email for Welcome Member with Credentials
+function generateWelcomeHtml(payload: EmailPayload, targetAppUrl: string): { subject: string; html: string } {
+  const { memberName, messName, to, data } = payload;
+  const tempPass = data.tempPassword || 'Khaon#1234';
+  const loginUrl = data.loginUrl || 'https://khaonkhata.online/login';
+
+  const subject = `[KhaonKhata] স্বাগতম ${memberName}! আপনার মেস একাউন্ট তৈরি হয়েছে`;
+
+  const html = `
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${subject}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f7f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #1e293b;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f7f6; padding: 28px 12px;">
+    <tr>
+      <td align="center">
+        <table width="100%" max-width="580" cellpadding="0" cellspacing="0" style="max-width: 580px; background-color: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 14px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+          
+          <!-- BRAND HEADER -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #059669 0%, #10b981 100%); padding: 24px 28px; text-align: left;">
+              <table cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="vertical-align: middle;">
+                    <div style="width: 44px; height: 44px; background-color: #ffffff; border-radius: 10px; display: inline-block; text-align: center; line-height: 44px; font-size: 22px; font-weight: 800; color: #059669;">
+                      খ
+                    </div>
+                  </td>
+                  <td style="padding-left: 14px; vertical-align: middle;">
+                    <h1 style="margin: 0; font-size: 20px; font-weight: 800; color: #ffffff;">
+                      KhaonKhata – খাওনখাতা
+                    </h1>
+                    <p style="margin: 3px 0 0; font-size: 12px; color: #d1fae5; font-weight: 500;">
+                      মেস: ${messName}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- BODY CONTENT -->
+          <tr>
+            <td style="padding: 28px;">
+              <h2 style="margin: 0 0 10px; font-size: 18px; font-weight: 700; color: #0f172a;">
+                স্বাগতম, ${memberName}! 🎉
+              </h2>
+              <p style="margin: 0 0 20px; font-size: 14px; line-height: 1.5; color: #475569;">
+                আপনাকে <strong>${messName}</strong> মেসে একজন সদস্য হিসেবে অন্তর্ভুক্ত করা হয়েছে। আপনার মেসের দৈনন্দিন মিল হিসাব, বাজার খরচ ও জমা দেখতে নিচের তথ্য দিয়ে লগইন করুন:
+              </p>
+
+              <!-- CREDENTIALS HIGHLIGHT BOX -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f0fdf4; border: 2px solid #86efac; border-radius: 12px; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 18px 20px;">
+                    <span style="font-size: 12px; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.5px;">আপনার লগইন তথ্য (Login Credentials)</span>
+                    <table width="100%" cellpadding="0" cellspacing="0" style="margin-top: 12px;">
+                      <tr>
+                        <td style="font-size: 13.5px; color: #475569; padding: 4px 0;">রেজিস্টার্ড ইমেইল / ID:</td>
+                        <td align="right" style="font-size: 14px; font-weight: 700; color: #0f172a; font-family: monospace;">${to}</td>
+                      </tr>
+                      <tr>
+                        <td style="font-size: 13.5px; color: #475569; padding: 4px 0;">অস্থায়ী পাসওয়ার্ড:</td>
+                        <td align="right" style="font-size: 16px; font-weight: 800; color: #059669; font-family: monospace;">${tempPass}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA BUTTON -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="padding-bottom: 16px;">
+                    <a href="${loginUrl}" style="display: inline-block; background-color: #059669; color: #ffffff; font-weight: 700; font-size: 15px; padding: 13px 32px; text-decoration: none; border-radius: 8px; box-shadow: 0 2px 8px rgba(5,150,105,0.3);">
+                      লগইন পোর্টালে যান ›
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-top: 16px;">
+                <p style="margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.4;">
+                  💡 <strong>নিরাপত্তা টিপস:</strong> প্রথমবার লগইন করার পর আপনার প্রোফাইল সেকশন থেকে পাসওয়ার্ড পরিবর্তন করে আপনার নিজস্ব পছন্দের পাসওয়ার্ড সেট করে নিন।
+                </p>
+              </div>
+
+            </td>
+          </tr>
+
+          <!-- FOOTER -->
+          <tr>
+            <td style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 28px; text-align: center;">
+              <p style="margin: 0; font-size: 11px; color: #94a3b8;">
+                © KhaonKhata (খাওনখাতা) • স্মার্ট মেস ও মিল ম্যানেজমেন্ট সিস্টেম
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+
+  return { subject, html };
+}
+
 /**
  * Main Controller Handler for Sending Emails via Resend
  * Supports both Express router and Vercel Serverless Function
@@ -355,6 +469,8 @@ export async function sendEmailHandler(req: Request, res: Response) {
     emailContent = generateMealHtml(payload, targetAppUrl);
   } else if (payload.type === 'deposit_confirmation') {
     emailContent = generateDepositHtml(payload, targetAppUrl);
+  } else if (payload.type === 'welcome_member') {
+    emailContent = generateWelcomeHtml(payload, targetAppUrl);
   } else {
     return res.status(400).json({ error: `Unsupported email type: ${payload.type}` });
   }

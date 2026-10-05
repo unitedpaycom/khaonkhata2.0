@@ -49,7 +49,12 @@ export function calcMonth(state: MessState, ym: string): MonthSummary {
     tot: 0,
   };
 
-  (state.members || []).forEach(m => {
+  const allMembers = [
+    ...(state.members || []),
+    ...(state.archivedMembers || []),
+  ];
+
+  allMembers.forEach(m => {
     r.mm[m.id] = { meals: 0, dep: 0, ind: 0, cost: 0, sh: 0, tot: 0, bal: 0 };
   });
 
@@ -96,7 +101,8 @@ export function calcMonth(state: MessState, ym: string): MonthSummary {
     });
 
   r.tot = r.baz + r.oth;
-  const memberCount = state.members?.length || 1;
+  const activeMembers = (state.members || []).filter(m => !m.isArchived);
+  const memberCount = activeMembers.length || 1;
   const sh = shT / memberCount;
 
   Object.values(r.mm).forEach(o => {
