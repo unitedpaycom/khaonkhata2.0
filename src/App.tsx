@@ -98,6 +98,76 @@ export interface AppUser {
   photoURL?: string | null;
 }
 
+const DASH_ICONS: Record<string, React.ReactNode> = {
+  bell: <path d="M6 17V11a6 6 0 0112 0v6l2 2H4zM10 21h4" />,
+  bowl: <path d="M3 12h18a9 9 0 01-18 0zM8 8c0-2 2-2 2-4M13 8c0-2 2-2 2-4" />,
+  wal: <path d="M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2h12M16 14h2" />,
+  cart: <path d="M3 4h2l2.5 11h10L20 7H6.5M9 20h.01M17 20h.01" />,
+  doc: <path d="M6 3h9l4 4v14H6zM14 3v5h5M9 13h6M9 17h6" />,
+  home: <path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10" />,
+  users: <path d="M16 20v-1a4 4 0 00-4-4H7a4 4 0 00-4 4v1M9.5 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7M17 4.5a3.5 3.5 0 010 6.5M21 20v-1a4 4 0 00-3-3.9" />,
+  pdf: <path d="M12 3v12M7 11l5 5 5-5M5 21h14" />,
+  chev: <path d="M9 6l6 6-6 6" />,
+  l: <path d="M15 6l-6 6 6 6" />,
+};
+
+export const DashIcon = ({
+  name,
+  size = 20,
+  className = 'i',
+  style,
+}: {
+  name: string;
+  size?: number;
+  className?: string;
+  style?: React.CSSProperties;
+}) => (
+  <svg
+    className={className}
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={style}
+    aria-hidden="true"
+  >
+    {DASH_ICONS[name] || <use href={`#${name}`} xlinkHref={`#${name}`} />}
+  </svg>
+);
+
+/**
+ * AnimatedTk: Counter component matching dashboard.html requestAnimationFrame count-up
+ */
+const AnimatedTk = ({ amount }: { amount: number }) => {
+  const [val, setVal] = useState(amount);
+
+  useEffect(() => {
+    const t0 = performance.now();
+    const duration = 1100;
+    const startVal = 0;
+    const targetVal = amount;
+    let animId: number;
+
+    const animate = (t: number) => {
+      const k = Math.min(1, (t - t0) / duration);
+      const ease = 1 - Math.pow(1 - k, 3);
+      setVal(Math.round(startVal + (targetVal - startVal) * ease));
+      if (k < 1) {
+        animId = requestAnimationFrame(animate);
+      }
+    };
+
+    animId = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animId);
+  }, [amount]);
+
+  return <>{tk(val)}</>;
+};
+
 export default function App() {
   const [user, setUser] = useState<AppUser | User | null>(() => {
     try {
@@ -109,6 +179,7 @@ export default function App() {
   });
   const [authLoading, setAuthLoading] = useState(true);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [barWidth, setBarWidth] = useState('0%');
 
   // Browser Route State for SEO, AdSense Compliance & Landing Navigation
   const [pathname, setPathname] = useState<string>(() => {
@@ -887,6 +958,18 @@ export default function App() {
     if (!messState) return null;
     return calcMonth(messState, activeYM);
   }, [messState, activeYM]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (monthSummary && monthSummary.dep > 0) {
+        const pct = Math.min(100, Math.max(4, Math.round((monthSummary.tot / monthSummary.dep) * 100)));
+        setBarWidth(`${pct}%`);
+      } else {
+        setBarWidth('0%');
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [monthSummary]);
 
   // Shift month
   const shiftMonth = (delta: number) => {
@@ -2432,124 +2515,127 @@ export default function App() {
 
       {/* Main Content Area */}
       <main id="app">
-        {/* Top Header Bar */}
-        <div className="top">
-          <button
-            className="pill md:hidden"
-            onClick={() => setDrawerOpen(true)}
-            aria-label="Menu"
-          >
-            <Icon name="menu" size={18} />
-          </button>
+        {/* Top Header Bar (When in views other than Home Dashboard) */}
+        {tab !== 'home' && (
+          <div className="top">
+            <button
+              className="pill md:hidden"
+              onClick={() => setDrawerOpen(true)}
+              aria-label="Menu"
+            >
+              <Icon name="menu" size={18} />
+            </button>
 
-          <h1 className="capitalize">
-            {tab === 'home' && 'ড্যাশবোর্ড'}
-            {tab === 'about' && 'About Us'}
-            {tab === 'deposit' && 'Add Deposit'}
-            {tab === 'meal' && 'Add Meal'}
-            {tab === 'cost' && 'Add Cost'}
-            {tab === 'members' && 'Mess Members'}
-            {tab === 'detail' && 'Member Details'}
-            {tab === 'active' && 'Active Month Details'}
-            {tab === 'all' && 'All Month Details'}
-            {tab === 'settings' && 'Mess Settings'}
-            {tab === 'profile' && 'Profile'}
-            {tab === 'payment_methods' && 'পেমেন্ট মেথড (Payment Methods)'}
-            {tab === 'member_deposit' && 'টাকা জমা (Deposit)'}
-          </h1>
+            <h1 className="capitalize">
+              {tab === 'about' && 'About Us'}
+              {tab === 'deposit' && 'Add Deposit'}
+              {tab === 'meal' && 'Add Meal'}
+              {tab === 'cost' && 'Add Cost'}
+              {tab === 'members' && 'Mess Members'}
+              {tab === 'detail' && 'Member Details'}
+              {tab === 'active' && 'Active Month Details'}
+              {tab === 'all' && 'All Month Details'}
+              {tab === 'settings' && 'Mess Settings'}
+              {tab === 'profile' && 'Profile'}
+              {tab === 'payment_methods' && 'পেমেন্ট মেথড (Payment Methods)'}
+              {tab === 'member_deposit' && 'টাকা জমা (Deposit)'}
+            </h1>
 
-          {/* Month selector pills */}
-          <button
-            className="pill"
-            onClick={() => shiftMonth(-1)}
-            aria-label="আগের মাস"
-          >
-            ‹
-          </button>
-          <span className="pill font-medium">
-            {banglaMonths[+activeMonthNum - 1]} {activeYear}
-            {isMonthLocked && ' (বন্ধ)'}
-          </span>
-          <button
-            className="pill"
-            onClick={() => shiftMonth(1)}
-            aria-label="পরের মাস"
-          >
-            ›
-          </button>
+            {/* Month selector pills */}
+            <button
+              className="pill"
+              onClick={() => shiftMonth(-1)}
+              aria-label="আগের মাস"
+            >
+              ‹
+            </button>
+            <span className="pill font-medium">
+              {banglaMonths[+activeMonthNum - 1]} {activeYear}
+              {isMonthLocked && ' (বন্ধ)'}
+            </span>
+            <button
+              className="pill"
+              onClick={() => shiftMonth(1)}
+              aria-label="পরের মাস"
+            >
+              ›
+            </button>
 
-          {/* Interactive Notification Bell Icon with Red Counter Badge */}
-          <button
-            type="button"
-            className="pill relative !p-2 flex items-center justify-center cursor-pointer transition-transform active:scale-95 text-[var(--fg)] hover:bg-[var(--line)]"
-            onClick={() => setIsNotificationOpen(true)}
-            aria-label="Notifications"
-            title="নোটিফিকেশন"
-          >
-            <Icon name="bell" size={19} />
-            {unreadNotificationCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md animate-pulse">
-                {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
-              </span>
-            )}
-          </button>
-
-          {/* User profile avatar pill */}
-          <button
-            className="pill pav"
-            onClick={() => setTab('profile')}
-            aria-label="Profile"
-            title={user.email || ''}
-          >
-            {user.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt="avatar"
-                className="w-full h-full rounded-full object-cover"
-              />
-            ) : (
-              (whoName[0] || 'U').toUpperCase()
-            )}
-          </button>
-        </div>
-
-        {/* Live Status indicator & Offline Banner */}
-        <div className="flex flex-col gap-1.5 mb-3 px-1">
-          <div className="flex items-center justify-between text-xs text-[var(--mut)]">
-            {isOnline ? (
-              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                অনলাইন · রিয়েলটাইম সিঙ্ক সক্রিয়
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
-                অফলাইন মোড (Offline Mode) · লোকাল ডাটা
-              </span>
-            )}
-            <span>মেস: <b>{messState.mess}</b> ({isManager ? 'ম্যানেজার' : 'সদস্য'})</span>
-          </div>
-
-          {/* Pending Offline Sync Notice Bar */}
-          {pendingSyncCount > 0 && (
-            <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-xs">
-              <span className="flex items-center gap-2">
-                <span>🔄</span>
-                <span><b>{pendingSyncCount}টি</b> পরিবর্তন অফলাইনে সংরক্ষিত আছে (অনলাইন হলে অটো-সিঙ্ক হবে)</span>
-              </span>
-              {isOnline && (
-                <button
-                  type="button"
-                  onClick={handleManualSync}
-                  disabled={isSyncing}
-                  className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-[11px] cursor-pointer transition disabled:opacity-50"
-                >
-                  {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'এখনই সিঙ্ক করুন'}
-                </button>
+            {/* Interactive Notification Bell Icon with Red Counter Badge */}
+            <button
+              type="button"
+              className="pill relative !p-2 flex items-center justify-center cursor-pointer transition-transform active:scale-95 text-[var(--fg)] hover:bg-[var(--line)]"
+              onClick={() => setIsNotificationOpen(true)}
+              aria-label="Notifications"
+              title="নোটিফিকেশন"
+            >
+              <Icon name="bell" size={19} />
+              {unreadNotificationCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-md animate-pulse">
+                  {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                </span>
               )}
+            </button>
+
+            {/* User profile avatar pill */}
+            <button
+              className="pill pav"
+              onClick={() => setTab('profile')}
+              aria-label="Profile"
+              title={user.email || ''}
+            >
+              {user.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt="avatar"
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                (whoName[0] || 'U').toUpperCase()
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Live Status indicator & Offline Banner (When in views other than Home Dashboard) */}
+        {tab !== 'home' && (
+          <div className="flex flex-col gap-1.5 mb-3 px-1">
+            <div className="flex items-center justify-between text-xs text-[var(--mut)]">
+              {isOnline ? (
+                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  অনলাইন · রিয়েলটাইম সিঙ্ক সক্রিয়
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-bold bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded border border-amber-300 dark:border-amber-700">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping"></span>
+                  অফলাইন মোড (Offline Mode) · লোকাল ডাটা
+                </span>
+              )}
+              <span>মেস: <b>{messState.mess}</b> ({isManager ? 'ম্যানেজার' : 'সদস্য'})</span>
             </div>
-          )}
-        </div>
+
+            {/* Pending Offline Sync Notice Bar */}
+            {pendingSyncCount > 0 && (
+              <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-xs">
+                <span className="flex items-center gap-2">
+                  <span>🔄</span>
+                  <span><b>{pendingSyncCount}টি</b> পরিবর্তন অফলাইনে সংরক্ষিত আছে (অনলাইন হলে অটো-সিঙ্ক হবে)</span>
+                </span>
+                {isOnline && (
+                  <button
+                    type="button"
+                    onClick={handleManualSync}
+                    disabled={isSyncing}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-[11px] cursor-pointer transition disabled:opacity-50"
+                  >
+                    {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'এখনই সিঙ্ক করুন'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* --- VIEW: ABOUT US --- */}
         {tab === 'about' && (
@@ -2563,211 +2649,312 @@ export default function App() {
           </div>
         )}
 
-        {/* --- VIEW: HOME (DASHBOARD) --- */}
+        {/* --- VIEW: HOME (DASHBOARD) - 100% EXACT DASHBOARD.HTML DESIGN & CODE --- */}
         {tab === 'home' && (
-          <div className="pg space-y-4">
-            {/* Header User Card */}
-            <div className="row !border-0 !py-1">
-              <span className="av">{(whoName[0] || '?').toUpperCase()}</span>
-              <div className="g1">
-                <b>{whoName}</b>
-                <br />
-                <small>
-                  {isManager ? 'ম্যানেজার' : 'মেম্বার'} · {messState.mess}
-                </small>
-              </div>
-              <span className="tag">
-                ● {isMonthLocked ? 'Closed' : 'Running'}
-              </span>
-            </div>
-
-            {/* Mess Hero Balance Card */}
-            <div className="hero2 relative overflow-hidden">
-              <div className="flex justify-between items-start">
-                <div>
-                  <small>Mess Balance</small>
-                  <div className="big">
-                    {monthSummary ? tk(monthSummary.dep - monthSummary.tot) : '৳0'}
-                  </div>
-                </div>
+          <div className="app">
+            <header className="hd rv">
+              <div className="hd-left">
                 <button
-                  type="button"
-                  className="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white font-semibold text-xs flex items-center gap-1.5 backdrop-blur-xs transition cursor-pointer border border-white/20 shadow-xs"
-                  disabled={isExportingPDF}
-                  onClick={handleDownloadGroupPDF}
-                  title="Download Group Mess Summary Report PDF"
+                  className="pill md:hidden !p-2 !h-[38px] !w-[38px] flex items-center justify-center shrink-0 cursor-pointer"
+                  onClick={() => setDrawerOpen(true)}
+                  aria-label="Menu"
                 >
-                  <span>📋</span>
-                  <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'Group PDF'}</span>
+                  <Icon name="menu" size={18} />
                 </button>
+                <h1>
+                  ড্যাশবোর্ড
+                  <svg viewBox="0 0 96 10" aria-hidden="true">
+                    <path d="M2 6c10-6 14 3 24-1s14 4 26 0 16-3 24 1 12-2 18-1" fill="none" stroke="#F3B84B" strokeWidth="3" strokeLinecap="round" />
+                  </svg>
+                </h1>
               </div>
-              <div className="tri">
-                <div>
-                  <small>Deposit</small>
-                  <b>{monthSummary ? tk(monthSummary.dep) : '৳0'}</b>
-                </div>
-                <div>
-                  <small>Total Cost</small>
-                  <b>{monthSummary ? tk(monthSummary.tot) : '৳0'}</b>
-                </div>
-                <div>
-                  <small>Meal Rate</small>
-                  <b>{monthSummary ? `${fm(monthSummary.rate)}৳` : '0৳'}</b>
-                </div>
-              </div>
-            </div>
 
-            {/* My Personal Summary */}
-            <div className="card">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="!mb-0">My Summary</h3>
+              <div className="hd-right">
+                <div className="mon">
+                  <button aria-label="আগের মাস" id="pm" onClick={() => shiftMonth(-1)}>
+                    <DashIcon name="l" />
+                  </button>
+                  <span id="mn">{banglaMonths[+activeMonthNum - 1]} {activeYear}</span>
+                  <button aria-label="পরের মাস" id="nm" onClick={() => shiftMonth(1)}>
+                    <DashIcon name="l" style={{ transform: 'scaleX(-1)' }} />
+                  </button>
+                </div>
+
                 <button
-                  type="button"
-                  className="btn g s flex items-center gap-1.5 text-xs font-semibold !py-1 !px-2.5 cursor-pointer"
-                  disabled={isExportingPDF}
-                  onClick={() => handleDownloadIndividualPDF()}
-                  title="Download Individual Monthly Expense & Meal Summary PDF"
+                  className="rb"
+                  aria-label="নোটিফিকেশন"
+                  onClick={() => setIsNotificationOpen(true)}
                 >
-                  <span>📄</span>
-                  <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'My Report PDF'}</span>
+                  <DashIcon name="bell" />
+                  {unreadNotificationCount > 0 && (
+                    <em>{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</em>
+                  )}
                 </button>
-              </div>
-              <div className="fig">
-                <div>
-                  <b>{fm(mySummary.meals)}</b>
-                  <small>Meals</small>
-                </div>
-                <div>
-                  <b>{tk(mySummary.dep)}</b>
-                  <small>Deposit</small>
-                </div>
-                <div>
-                  <b>{tk(mySummary.tot)}</b>
-                  <small>Cost</small>
-                </div>
-                <div>
-                  <b className={mySummary.bal >= 0 ? 'ok' : 'bad'}>
-                    {tk(mySummary.bal)}
-                  </b>
-                  <small>Balance</small>
-                </div>
-              </div>
-            </div>
 
-            {/* Quick Action Buttons */}
-            <div className="qa">
-              {isManager && (
-                <button onClick={() => { setTab('meal'); setMealSubTab('add'); }}>
-                  <i><Icon name="bowl" size={22} /></i>
-                  Add Meal
-                </button>
-              )}
-              {isManager && (
-                <button onClick={() => setTab('deposit')}>
-                  <i><Icon name="wallet" size={22} /></i>
-                  Add Deposit
-                </button>
-              )}
-              {isManager && (
-                <button onClick={() => setTab('cost')}>
-                  <i><Icon name="cart" size={22} /></i>
-                  Add Cost
-                </button>
-              )}
-              <button onClick={() => { setTab('meal'); setMealSubTab('req'); }}>
-                <i><Icon name="req" size={22} /></i>
-                Request {pendingReqCount > 0 ? `(${pendingReqCount})` : ''}
-              </button>
-
-              {/* For Regular Members: Next to Request option, show Deposit */}
-              {!isManager && (
-                <button onClick={() => setTab('member_deposit')}>
-                  <i><Icon name="wallet" size={22} /></i>
-                  Deposit
-                </button>
-              )}
-            </div>
-
-            {/* Under the existing 4 options: 5th option named Payment Methods (Visible ONLY to Manager) */}
-            {isManager && (
-              <div className="mb-4">
                 <button
-                  onClick={() => setTab('payment_methods')}
-                  className="w-full p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-500/30 hover:border-emerald-500 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/40 flex items-center justify-between text-[var(--fg)] transition-all cursor-pointer shadow-xs"
+                  className="av"
+                  onClick={() => setTab('profile')}
+                  title={user?.email || ''}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
-                      <Icon name="wallet" size={20} />
-                    </span>
-                    <div className="text-left">
-                      <div className="flex items-center gap-2">
-                        <b className="text-sm font-bold text-emerald-900 dark:text-emerald-200">
-                          Payment Methods (পেমেন্ট মেথড)
-                        </b>
-                        <span className="tag text-[10px] text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-500/20">
-                          ম্যানেজার অপশন
-                        </span>
-                      </div>
-                      <p className="text-xs text-[var(--mut)] mt-0.5">
-                        বিকাশ, নগদ, রকেট, উপায় ও বাংলা কিউআর পেমেন্ট তথ্য সেট করুন
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {pendingDepositCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-bold">
-                        {pendingDepositCount} নতুন জমা রিকোয়েস্ট
-                      </span>
-                    )}
-                    <span className="text-xl text-emerald-600 dark:text-emerald-400 font-bold">›</span>
-                  </div>
+                  {user?.photoURL ? (
+                    <img src={user.photoURL} alt="avatar" className="w-full h-full rounded-full object-cover" />
+                  ) : (
+                    (whoName[0] || 'U').toUpperCase()
+                  )}
                 </button>
+              </div>
+            </header>
+
+            <div className="st rv" style={{ animationDelay: '.05s' }}>
+              <span className="dot"></span>
+              {isOnline ? 'অনলাইন · রিয়েলটাইম সিঙ্ক সক্রিয়' : 'অফলাইন মোড · লোকাল ডাটা'}
+              <span>·</span>
+              মেস: {messState.mess} ({isManager ? 'ম্যানেজার' : 'মেম্বার'})
+            </div>
+
+            {/* Pending Offline Sync Notice Bar */}
+            {pendingSyncCount > 0 && (
+              <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-xs mb-3">
+                <span className="flex items-center gap-2">
+                  <span>🔄</span>
+                  <span><b>{pendingSyncCount}টি</b> পরিবর্তন অফলাইনে সংরক্ষিত আছে (অনলাইন হলে অটো-সিঙ্ক হবে)</span>
+                </span>
+                {isOnline && (
+                  <button
+                    type="button"
+                    onClick={handleManualSync}
+                    disabled={isSyncing}
+                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-[11px] cursor-pointer transition disabled:opacity-50"
+                  >
+                    {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'এখনই সিঙ্ক করুন'}
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Today's Eaters */}
-            <div className="card">
-              <h3>
-                আজ কে কে খাচ্ছে <span className="tag">{TD}</span>
-              </h3>
-              {todayEaters.length > 0 ? (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {todayEaters.map(m => (
-                    <span key={m.id} className="pill">
-                      {m.name} · {mt(todayMeals[m.id])} মিল
-                    </span>
-                  ))}
+            <div className="me rv" style={{ animationDelay: '.08s' }}>
+              <span className="av">{(whoName[0] || 'U').toUpperCase()}</span>
+              <div>
+                <b>{whoName}</b>
+                <small>{isManager ? 'ম্যানেজার' : 'মেম্বার'} · {messState.mess}</small>
+              </div>
+              <span className="stamp">{isMonthLocked ? 'Closed' : 'Running'}</span>
+            </div>
+
+            <div className="grid g2c">
+              {/* Mess Balance: Notebook Page */}
+              <section className="card bal rv" style={{ animationDelay: '.12s' }}>
+                <span className="tape"></span>
+                <small>Mess Balance</small>
+                <div>
+                  <button
+                    className="btn pdf"
+                    disabled={isExportingPDF}
+                    onClick={handleDownloadGroupPDF}
+                    title="Download Group Mess Summary Report PDF"
+                  >
+                    <DashIcon name="pdf" size={16} />
+                    <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'Group PDF'}</span>
+                  </button>
                 </div>
+                <div className="big num">
+                  <AnimatedTk amount={monthSummary ? monthSummary.dep - monthSummary.tot : 0} />
+                </div>
+                <div className="bar" aria-hidden="true">
+                  <i style={{ width: barWidth }}></i>
+                </div>
+                <div className="tri">
+                  <div>
+                    <small>Deposit</small>
+                    <b className="num">
+                      <AnimatedTk amount={monthSummary ? monthSummary.dep : 0} />
+                    </b>
+                  </div>
+                  <div>
+                    <small>Total Cost</small>
+                    <b className="num">
+                      <AnimatedTk amount={monthSummary ? monthSummary.tot : 0} />
+                    </b>
+                  </div>
+                  <div>
+                    <small>Meal Rate</small>
+                    <b className="num">{monthSummary ? `${fm(monthSummary.rate)}৳` : '0৳'}</b>
+                  </div>
+                </div>
+              </section>
+
+              {/* My Personal Summary */}
+              <section className="card my rv" style={{ animationDelay: '.18s' }}>
+                <h2>
+                  My Summary
+                  <button
+                    className="btn"
+                    disabled={isExportingPDF}
+                    onClick={() => handleDownloadIndividualPDF()}
+                    title="Download Individual Monthly Expense & Meal Summary PDF"
+                  >
+                    <DashIcon name="pdf" size={16} />
+                    <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'My Report PDF'}</span>
+                  </button>
+                </h2>
+                <div className="fig">
+                  <div>
+                    <b className="num">{fm(mySummary.meals)}</b>
+                    <small>Meals</small>
+                  </div>
+                  <div>
+                    <b className="num">{tk(mySummary.dep)}</b>
+                    <small>Deposit</small>
+                  </div>
+                  <div>
+                    <b className="num">{tk(mySummary.tot)}</b>
+                    <small>Cost</small>
+                  </div>
+                  <div>
+                    <b className={`num ${mySummary.bal >= 0 ? 'pos' : 'neg'}`}>
+                      {tk(mySummary.bal)}
+                    </b>
+                    <small>Balance</small>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* Quick Action Buttons & Payment Methods */}
+            <div className="grid" style={{ marginTop: '14px' }}>
+              <section className="card rv" style={{ animationDelay: '.24s' }}>
+                <div className="qa">
+                  {isManager ? (
+                    <>
+                      <button onClick={() => { setTab('meal'); setMealSubTab('add'); }}>
+                        <i><DashIcon name="bowl" size={24} /></i>
+                        Add Meal
+                      </button>
+                      <button onClick={() => setTab('deposit')}>
+                        <i><DashIcon name="wal" size={24} /></i>
+                        Add Deposit
+                      </button>
+                      <button onClick={() => setTab('cost')}>
+                        <i><DashIcon name="cart" size={24} /></i>
+                        Add Cost
+                      </button>
+                      <button onClick={() => { setTab('meal'); setMealSubTab('req'); }}>
+                        <i><DashIcon name="doc" size={24} /></i>
+                        Request {pendingReqCount > 0 ? `(${pendingReqCount})` : ''}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={() => { setTab('meal'); setMealSubTab('req'); }}>
+                        <i><DashIcon name="bowl" size={24} /></i>
+                        Add Meal
+                      </button>
+                      <button onClick={() => setTab('member_deposit')}>
+                        <i><DashIcon name="wal" size={24} /></i>
+                        Deposit
+                      </button>
+                      <button onClick={() => setTab('active')}>
+                        <i><DashIcon name="cart" size={24} /></i>
+                        Cost Details
+                      </button>
+                      <button onClick={() => { setTab('meal'); setMealSubTab('req'); }}>
+                        <i><DashIcon name="doc" size={24} /></i>
+                        Request
+                      </button>
+                    </>
+                  )}
+                </div>
+              </section>
+
+              {isManager ? (
+                <section
+                  className="card pay rv"
+                  style={{ animationDelay: '.28s' }}
+                  onClick={() => setTab('payment_methods')}
+                >
+                  <i><DashIcon name="wal" size={22} /></i>
+                  <div>
+                    <b>Payment Methods (পেমেন্ট মেথড)</b>
+                    <small>বিকাশ, নগদ, রকেট, উপায় ও ব্যাংক পেমেন্ট তথ্য এখানে</small>
+                  </div>
+                  <div className="flex items-center gap-2 ml-auto">
+                    {pendingDepositCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-bold">
+                        {pendingDepositCount} নতুন জমা
+                      </span>
+                    )}
+                    <span className="tg">ম্যানেজার অপশন</span>
+                    <DashIcon name="chev" style={{ color: 'var(--g)' }} />
+                  </div>
+                </section>
               ) : (
-                <small>আজ এখনো কোনো মিল যোগ হয়নি।</small>
+                <section
+                  className="card pay rv"
+                  style={{ animationDelay: '.28s' }}
+                  onClick={() => setTab('member_deposit')}
+                >
+                  <i><DashIcon name="wal" size={22} /></i>
+                  <div>
+                    <b>Payment Methods (পেমেন্ট মেথড)</b>
+                    <small>বিকাশ, নগদ, রকেট, উপায় ও ব্যাংক পেমেন্ট তথ্য এখানে</small>
+                  </div>
+                  <DashIcon name="chev" className="i ml-auto" style={{ color: 'var(--g)' }} />
+                </section>
               )}
             </div>
 
-            {/* Daily Bazar Bar Chart */}
-            <div className="card">
-              <h3>দৈনিক বাজার খরচ</h3>
-              <div className="bars">
-                {dailyBazarAmounts.map((amt, idx) => {
-                  const pct = (amt / maxBazar) * 100;
-                  return (
-                    <div
-                      key={idx}
-                      title={`${idx + 1} তারিখ: ${tk(amt)}`}
-                      style={{ height: `${Math.max(2, pct)}%` }}
-                    />
-                  );
-                })}
-              </div>
+            {/* Today's Eaters & Daily Bazar */}
+            <div className="grid g3c" style={{ marginTop: '14px' }}>
+              <section className="card rv" style={{ animationDelay: '.32s' }}>
+                <h2>আজ কে কে খাচ্ছে <span className="chip">{TD}</span></h2>
+                <div className="chips" id="eat">
+                  {todayEaters.length > 0 ? (
+                    todayEaters.map((m, i) => (
+                      <span key={m.id} style={{ animationDelay: `${0.4 + i * 0.05}s` }}>
+                        {m.name} <em>· {mt(todayMeals[m.id])} মিল</em>
+                      </span>
+                    ))
+                  ) : (
+                    <div className="text-xs text-[var(--mut)] py-2">আজ এখনো কোনো মিল যোগ হয়নি।</div>
+                  )}
+                </div>
+              </section>
+
+              <section className="card rv" style={{ animationDelay: '.36s' }}>
+                <h2>
+                  দৈনিক বাজার খরচ
+                  <span className="chip num">{monthSummary ? tk(monthSummary.tot) : '৳0'}</span>
+                </h2>
+                <div className="bars" id="bars">
+                  {Array.from({ length: 31 }, (_, i) => {
+                    const amt = dailyBazarAmounts[i] || 0;
+                    const pct = maxBazar > 0 ? (amt / maxBazar) * 100 : 0;
+                    return (
+                      <i
+                        key={i}
+                        data-t={`${i + 1} তারিখ: ${tk(amt)}`}
+                        style={{
+                          height: `${amt ? Math.max(4, pct) : 2}%`,
+                          animationDelay: `${0.5 + i * 0.015}s`,
+                          opacity: amt ? 0.88 : 0.25,
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+                <div className="ax">
+                  <span>১</span><span>৮</span><span>১৫</span><span>২২</span><span>৩১</span>
+                </div>
+              </section>
             </div>
 
             {/* Notices Board */}
-            <div className="card">
-              <h3>
+            <section className="card rv" style={{ marginTop: '14px', animationDelay: '.4s' }}>
+              <h2>
                 <span>নোটিশ</span>
                 {isManager && (
                   <button
-                    className="btn s"
+                    className="btn p"
                     onClick={() => {
                       setModalConfig({
                         isOpen: true,
@@ -2805,102 +2992,90 @@ export default function App() {
                     + নতুন
                   </button>
                 )}
-              </h3>
-              {messState.notices.length > 0 ? (
+              </h2>
+              {messState.notices && messState.notices.length > 0 ? (
                 <div className="space-y-2 mt-2">
-                  {messState.notices
-                    .slice()
-                    .reverse()
-                    .map(n => (
-                      <div key={n.id} className="row">
-                        <div className="g1">
-                          <p className="font-medium text-sm m-0">{n.text}</p>
-                          <small>{n.date}</small>
-                        </div>
-                        {isManager && (
-                          <button
-                            className="btn g s"
-                            onClick={() => {
-                              const updated = messState.notices.filter(x => x.id !== n.id);
-                              saveStateToFirestore({ ...messState, notices: updated }, 'নোটিশ মুছে ফেলা হয়েছে');
-                            }}
-                          >
-                            ✕
-                          </button>
-                        )}
+                  {messState.notices.slice().reverse().map(n => (
+                    <div key={n.id} className="row">
+                      <div className="g1">
+                        <p className="font-medium text-sm m-0">{n.text}</p>
+                        <small>{n.date}</small>
                       </div>
-                    ))}
+                      {isManager && (
+                        <button
+                          className="btn g s"
+                          onClick={() => {
+                            const updated = messState.notices.filter(x => x.id !== n.id);
+                            saveStateToFirestore({ ...messState, notices: updated }, 'নোটিশ মুছে ফেলা হয়েছে');
+                          }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <small>কোনো নোটিশ নেই</small>
+                <div className="empty">
+                  <svg viewBox="0 0 64 48">
+                    <rect x="12" y="6" width="40" height="36" rx="5" />
+                    <path d="M20 18h24M20 26h16M44 36l8-8M50 30l3 3" />
+                  </svg>
+                  <div>কোনো নোটিশ নেই</div>
+                </div>
               )}
+            </section>
+
+            {/* Members Section */}
+            <div className="mh">
+              <h2>সদস্যবৃন্দ ({messState.members.length})</h2>
+              <a href="#" onClick={(e) => { e.preventDefault(); setTab('members'); }}>সব দেখুন</a>
             </div>
 
-            {/* All Members Section */}
-            <div>
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="m-0">সদস্যবৃন্দ ({messState.members.length})</h3>
-                <button
-                  className="btn g s"
-                  onClick={() => setTab('members')}
-                >
-                  সব দেখুন
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                {messState.members.map(m => {
-                  const mSummary = monthSummary?.mm[m.id] || {
-                    meals: 0,
-                    dep: 0,
-                    cost: 0,
-                    ind: 0,
-                    sh: 0,
-                    tot: 0,
-                    bal: 0,
-                  };
-                  return (
-                    <div
-                      key={m.id}
-                      className="card mb cursor-pointer hover:border-[var(--pri)]"
-                      onClick={() => {
-                        setDetailMemberId(m.id);
-                        setTab('detail');
-                      }}
-                    >
-                      <div className="row !pt-0 !pb-2">
-                        <span className="av">{(m.name[0] || '?').toUpperCase()}</span>
-                        <div className="g1">
-                          <b>{m.name}</b>
-                          {m.id === messState.mgr && (
-                            <span className="tag ml-2 text-xs">Manager</span>
-                          )}
-                          <br />
-                          <small>{m.room || 'Room -'}</small>
-                        </div>
-                        <div className="text-right">
-                          <small>ব্যালেন্স</small>
-                          <br />
-                          <b className={mSummary.bal >= 0 ? 'ok' : 'bad'}>
-                            {tk(mSummary.bal)}
-                          </b>
-                        </div>
+            <div className="mg" id="mg">
+              {messState.members.map((m, i) => {
+                const mSummary = monthSummary?.mm[m.id] || {
+                  meals: 0,
+                  dep: 0,
+                  cost: 0,
+                  ind: 0,
+                  sh: 0,
+                  tot: 0,
+                  bal: 0,
+                };
+                const b = mSummary.bal;
+                return (
+                  <article
+                    key={m.id}
+                    className="card m"
+                    style={{ animationDelay: `${0.45 + i * 0.06}s` }}
+                    onClick={() => {
+                      setDetailMemberId(m.id);
+                      setTab('detail');
+                    }}
+                  >
+                    <div className="mt">
+                      <span className="av">{(m.name[0] || '?').toUpperCase()}</span>
+                      <div>
+                        <b>{m.name}</b>
+                        <small>
+                          {m.id === messState.mgr && <span className="tag">Manager</span>}
+                          {m.room || 'Room -'}
+                        </small>
                       </div>
-
-                      {/* Summary Breakdown */}
-                      <div className="br"><span>মোট মিল</span><b>{fm(mSummary.meals)}</b></div>
-                      <div className="br"><span>মোট জমা</span><b>{tk(mSummary.dep)}</b></div>
-                      <div className="br"><span>মিল বাবদ খরচ</span><b>{tk(mSummary.cost)}</b></div>
-                      {mSummary.ind > 0 && <div className="br"><span>ব্যক্তিগত খরচ</span><b>{tk(mSummary.ind)}</b></div>}
-                      <div className="br"><span>শেয়ার্ড খরচ</span><b>{tk(mSummary.sh)}</b></div>
-                      <div className="br border-t border-[var(--line)] pt-2 mt-1">
-                        <span>মোট খরচ</span>
-                        <b className="bad">{tk(mSummary.tot)}</b>
+                      <div className="bl">
+                        <small>ব্যালেন্স</small>
+                        <b className={b >= 0 ? 'pos' : 'neg'}>{tk(b)}</b>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                    <div className="r"><span>মোট মিল</span><b className="num">{fm(mSummary.meals)}</b></div>
+                    <div className="r"><span>মোট জমা</span><b className="num">{tk(mSummary.dep)}</b></div>
+                    <div className="r"><span>মিল বাবদ খরচ</span><b className="num">{tk(mSummary.cost)}</b></div>
+                    <div className="r"><span>শেয়ার্ড খরচ</span><b className="num">{tk(mSummary.sh)}</b></div>
+                    <div className="r t"><span>মোট খরচ</span><b className="num">{tk(mSummary.tot)}</b></div>
+                  </article>
+                );
+              })}
             </div>
           </div>
         )}
@@ -4864,74 +5039,50 @@ export default function App() {
         )}
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
-      <nav className="mobile-bottom-nav">
+      {/* Floating Navigation Bar */}
+      <nav className="nav" aria-label="Main">
         <button
           className={tab === 'home' ? 'on' : ''}
           onClick={() => { setTab('home'); setDrawerOpen(false); }}
         >
-          <Icon name="home" size={20} />
-          <span>Home</span>
+          <svg className="i"><use href="#home" /></svg>
+          Home
         </button>
 
-        {isManager && (
-          <button
-            className={tab === 'deposit' ? 'on' : ''}
-            onClick={() => { setTab('deposit'); setDrawerOpen(false); }}
-          >
-            <Icon name="wallet" size={20} />
-            <span>Deposit</span>
-          </button>
-        )}
+        <button
+          className={tab === 'deposit' || tab === 'member_deposit' ? 'on' : ''}
+          onClick={() => { setTab(isManager ? 'deposit' : 'member_deposit'); setDrawerOpen(false); }}
+        >
+          <svg className="i"><use href="#wal" /></svg>
+          Deposit
+        </button>
 
         <button
           className={tab === 'meal' ? 'on' : ''}
           onClick={() => { setTab('meal'); setDrawerOpen(false); }}
         >
-          <Icon name="bowl" size={20} />
-          <span>Meal</span>
+          <svg className="i"><use href="#bowl" /></svg>
+          Meal
           {pendingReqCount > 0 && isManager && (
-            <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[var(--bad)]"></span>
+            <span className="absolute top-1.5 right-3 w-2 h-2 rounded-full bg-[var(--red)]"></span>
           )}
         </button>
 
-        {isManager && (
-          <button
-            className={tab === 'cost' ? 'on' : ''}
-            onClick={() => { setTab('cost'); setDrawerOpen(false); }}
-          >
-            <Icon name="cart" size={20} />
-            <span>Cost</span>
-          </button>
-        )}
-
-        {!isManager && (
-          <button
-            className={tab === 'member_deposit' ? 'on' : ''}
-            onClick={() => { setTab('member_deposit'); setDrawerOpen(false); }}
-          >
-            <Icon name="wallet" size={20} />
-            <span>Deposit</span>
-          </button>
-        )}
+        <button
+          className={tab === 'cost' ? 'on' : ''}
+          onClick={() => { setTab('cost'); setDrawerOpen(false); }}
+        >
+          <svg className="i"><use href="#cart" /></svg>
+          Cost
+        </button>
 
         <button
           className={tab === 'members' || tab === 'detail' ? 'on' : ''}
           onClick={() => { setTab('members'); setDrawerOpen(false); }}
         >
-          <Icon name="users" size={20} />
-          <span>Members</span>
+          <svg className="i"><use href="#users" /></svg>
+          Members
         </button>
-
-        {!isManager && (
-          <button
-            className={tab === 'profile' ? 'on' : ''}
-            onClick={() => { setTab('profile'); setDrawerOpen(false); }}
-          >
-            <Icon name="users" size={20} />
-            <span>Profile</span>
-          </button>
-        )}
       </nav>
 
       {/* Mobile Drawer (Menu) */}
