@@ -89,6 +89,7 @@ import { LoginPage } from './components/LoginPage';
 import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { TermsPage } from './components/TermsPage';
 import { ContactPage } from './components/ContactPage';
+import { LogoLoader } from './components/LogoLoader';
 
 export interface AppUser {
   uid: string;
@@ -112,22 +113,25 @@ export default function App() {
   // Browser Route State for SEO, AdSense Compliance & Landing Navigation
   const [pathname, setPathname] = useState<string>(() => {
     if (typeof window !== 'undefined') {
-      return window.location.pathname || '/';
+      const p = window.location.pathname || '/';
+      return p === '/dashboard' ? '/app' : p;
     }
     return '/';
   });
 
   const navigate = (path: string) => {
+    const targetPath = path === '/dashboard' ? '/app' : path;
     if (typeof window !== 'undefined') {
       window.history.pushState({}, '', path);
     }
-    setPathname(path);
+    setPathname(targetPath);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   useEffect(() => {
     const handlePop = () => {
-      setPathname(window.location.pathname || '/');
+      const p = window.location.pathname || '/';
+      setPathname(p === '/dashboard' ? '/app' : p);
     };
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
@@ -1929,39 +1933,36 @@ export default function App() {
     return Array.from({ length: dim }, (_, i) => `${activeYM}-${pad(i + 1)}`);
   }, [activeYear, activeMonthNum, activeYM]);
 
-  // Full-Screen Loading Animation:
-  // Shows while verifying session (authLoading) when trying to access /app
-  const isCheckingSessionOrMess = authLoading && (pathname === '/app' || (pathname === '/login' && !!user));
-
-  if (isCheckingSessionOrMess) {
+  // Full-Screen Logo Loading Animation:
+  // Shows while verifying session (authLoading) across all routes to prevent visual flashing
+  if (authLoading) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg)] p-4 select-none">
-        <div className="text-center space-y-6 max-w-sm w-full mx-auto">
-          {/* Logo & Brand Icon with dual ring spinner */}
-          <div className="relative w-20 h-20 mx-auto">
-            <div className="w-20 h-20 rounded-full border-4 border-emerald-500/15 border-t-emerald-600 animate-spin"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/60 flex items-center justify-center text-emerald-600 shadow-sm">
-                <Icon name="bowl" size={26} />
-              </div>
-            </div>
-          </div>
+      <LogoLoader
+        text="মেস সেশন যাচাই করা হচ্ছে..."
+        isReady={!authLoading}
+      />
+    );
+  }
 
-          <div className="space-y-2">
-            <h1 className="font-serif text-2xl font-bold tracking-tight text-[var(--fg)]">
-              KhaonKhata
-            </h1>
-            <p className="text-sm font-medium text-[var(--mut)] flex items-center justify-center gap-1.5">
-              <span>সেশন ও মেস যাচাই করা হচ্ছে</span>
-              <span className="inline-flex gap-1 items-center">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-bounce" style={{ animationDelay: '300ms' }}></span>
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
+  // --- STRICT AUTO-REDIRECT FOR LOGGED-IN USERS AT ROOT OR LOGIN ---
+  // If an authenticated user opens or refreshes root (/) or /login, redirect straight to Dashboard
+  if (user && (pathname === '/' || pathname === '' || pathname === '/login')) {
+    setTimeout(() => navigate('/dashboard'), 0);
+    return (
+      <LogoLoader
+        text="ড্যাশবোর্ড লোড হচ্ছে..."
+        isReady={!messLoading}
+      />
+    );
+  }
+
+  // Loading state while fetching mess data for authenticated user
+  if (user && messLoading && currentMessId) {
+    return (
+      <LogoLoader
+        text="ড্যাশবোর্ড লোড হচ্ছে..."
+        isReady={!messLoading}
+      />
     );
   }
 
@@ -2027,10 +2028,6 @@ export default function App() {
 
   // --- DEDICATED ROUTE: LOGIN (/login) ---
   if (pathname === '/login') {
-    if (user) {
-      setTimeout(() => navigate('/app'), 0);
-      return null;
-    }
     return (
       <div className="min-h-screen bg-[var(--bg)]">
         <LoginPage
@@ -2047,7 +2044,8 @@ export default function App() {
     );
   }
 
-  // --- ROOT ROUTE: WORLD-CLASS RESPONSIVE LANDING PAGE (/) ---
+  // --- ROOT ROUTE: 100% EXACT RESPONSIVE LANDING PAGE (/) ---
+  // Shown only to unauthenticated visitors or users who explicitly logged out
   if (pathname === '/' || pathname === '') {
     return (
       <div className="min-h-screen bg-[var(--bg)]">
