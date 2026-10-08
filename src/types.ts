@@ -114,6 +114,7 @@ export interface MessNotification {
   actorName?: string;
   targetMemberId?: string;
   amount?: number;
+  slot?: MealSlot;
   metadata?: Record<string, any>;
 }
 

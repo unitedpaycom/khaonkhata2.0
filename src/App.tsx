@@ -2514,7 +2514,7 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main id="app">
+      <main id="app" className={tab === 'home' ? 'home-active' : ''}>
         {/* Top Header Bar (When in views other than Home Dashboard) */}
         {tab !== 'home' && (
           <div className="top">
@@ -2649,216 +2649,224 @@ export default function App() {
           </div>
         )}
 
-        {/* --- VIEW: HOME (DASHBOARD) - 100% EXACT DASHBOARD.HTML DESIGN & CODE --- */}
+        {/* --- VIEW: HOME (DASHBOARD) - 100% EXACT REDESIGNED DASHBOARD --- */}
         {tab === 'home' && (
-          <div className="app">
-            <header className="hd rv">
-              <div className="hd-left">
-                <button
-                  className="pill md:hidden !p-2 !h-[38px] !w-[38px] flex items-center justify-center shrink-0 cursor-pointer"
-                  onClick={() => setDrawerOpen(true)}
-                  aria-label="Menu"
-                >
-                  <Icon name="menu" size={18} />
-                </button>
-                <h1>
-                  ড্যাশবোর্ড
-                  <svg viewBox="0 0 96 10" aria-hidden="true">
-                    <path d="M2 6c10-6 14 3 24-1s14 4 26 0 16-3 24 1 12-2 18-1" fill="none" stroke="#F3B84B" strokeWidth="3" strokeLinecap="round" />
-                  </svg>
-                </h1>
-              </div>
-
-              <div className="hd-right">
-                <div className="mon">
-                  <button aria-label="আগের মাস" id="pm" onClick={() => shiftMonth(-1)}>
-                    <DashIcon name="l" />
-                  </button>
-                  <span id="mn">{banglaMonths[+activeMonthNum - 1]} {activeYear}</span>
-                  <button aria-label="পরের মাস" id="nm" onClick={() => shiftMonth(1)}>
-                    <DashIcon name="l" style={{ transform: 'scaleX(-1)' }} />
-                  </button>
-                </div>
-
-                <button
-                  className="rb"
-                  aria-label="নোটিফিকেশন"
-                  onClick={() => setIsNotificationOpen(true)}
-                >
-                  <DashIcon name="bell" />
-                  {unreadNotificationCount > 0 && (
-                    <em>{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</em>
-                  )}
-                </button>
-
-                <button
-                  className="av"
+          <div className="shell">
+            {/* Redesigned Hero Header */}
+            <header className="hero">
+              <div className="ht">
+                <span
+                  className="avl"
                   onClick={() => setTab('profile')}
-                  title={user?.email || ''}
+                  title={user?.email || 'Profile'}
                 >
                   {user?.photoURL ? (
                     <img src={user.photoURL} alt="avatar" className="w-full h-full rounded-full object-cover" />
                   ) : (
                     (whoName[0] || 'U').toUpperCase()
                   )}
+                </span>
+                <div className="gr">
+                  <small>স্বাগতম,</small>
+                  <b>{whoName}</b>
+                </div>
+                <button
+                  className="bell glass"
+                  aria-label="নোটিফিকেশন"
+                  onClick={() => setIsNotificationOpen(true)}
+                >
+                  <svg className="i w-5 h-5"><use href="#bell" /></svg>
+                  {unreadNotificationCount > 0 && (
+                    <em>{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</em>
+                  )}
                 </button>
+              </div>
+
+              <div className="chips">
+                <span className="pill glass">
+                  {isManager ? 'ম্যানেজার' : 'মেম্বার'} · {messState.mess}
+                </span>
+                <span className="pill glass">
+                  <span className="dot"></span>
+                  {isOnline ? 'রিয়েলটাইম সিঙ্ক' : 'অফলাইন মোড'}
+                </span>
+              </div>
+
+              {/* Pending Offline Sync Notice in Hero */}
+              {pendingSyncCount > 0 && (
+                <div className="mt-3 p-2.5 rounded-2xl bg-black/25 backdrop-blur-sm border border-white/20 text-white text-xs flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span>🔄</span>
+                    <span><b>{pendingSyncCount}টি</b> পরিবর্তন অফলাইনে সংরক্ষিত</span>
+                  </span>
+                  {isOnline && (
+                    <button
+                      type="button"
+                      onClick={handleManualSync}
+                      disabled={isSyncing}
+                      className="px-2.5 py-1 bg-amber-400 text-amber-950 rounded-lg font-bold text-[11px] cursor-pointer"
+                    >
+                      {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'সিঙ্ক'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="bt">
+                <div className="mon glass">
+                  <button id="pm" aria-label="আগের মাস" onClick={() => shiftMonth(-1)}>
+                    <svg className="i" width="18" height="18"><use href="#l" /></svg>
+                  </button>
+                  <span id="mn">{banglaMonths[+activeMonthNum - 1]} {activeYear}</span>
+                  <button id="nm" aria-label="পরের মাস" onClick={() => shiftMonth(1)}>
+                    <svg className="i" width="18" height="18" style={{ transform: 'scaleX(-1)' }}><use href="#l" /></svg>
+                  </button>
+                </div>
+                <button
+                  className="gb glass"
+                  disabled={isExportingPDF}
+                  onClick={handleDownloadGroupPDF}
+                  title="Download Group Mess Summary Report PDF"
+                >
+                  <svg className="i" width="15" height="15"><use href="#pdf" /></svg>
+                  <span>{isExportingPDF ? 'তৈরি...' : 'Group PDF'}</span>
+                </button>
+              </div>
+
+              <div className="bm">
+                <div>
+                  <small>Mess Balance</small>
+                  <div className="big" id="bal">
+                    <AnimatedTk amount={monthSummary ? monthSummary.dep - monthSummary.tot : 0} />
+                  </div>
+                </div>
+                <div className="ring" aria-label={`খরচ ${monthSummary && monthSummary.dep > 0 ? Math.round((monthSummary.tot / monthSummary.dep) * 100) : 0}%`}>
+                  <svg viewBox="0 0 80 80">
+                    <circle className="t" cx="40" cy="40" r="34" />
+                    <circle
+                      className="p"
+                      id="rp"
+                      cx="40"
+                      cy="40"
+                      r="34"
+                      style={{
+                        strokeDashoffset: 214 * (1 - Math.min(1, Math.max(0, monthSummary && monthSummary.dep > 0 ? monthSummary.tot / monthSummary.dep : 0))),
+                      }}
+                    />
+                  </svg>
+                  <div>
+                    <b>{monthSummary && monthSummary.dep > 0 ? `${Math.min(100, Math.round((monthSummary.tot / monthSummary.dep) * 100))}%` : '0%'}</b>
+                    <small>খরচ</small>
+                  </div>
+                </div>
+              </div>
+
+              <div className="tiles">
+                <div className="glass">
+                  <small>Deposit</small>
+                  <b>{monthSummary ? tk(monthSummary.dep) : '৳0'}</b>
+                </div>
+                <div className="glass">
+                  <small>Total Cost</small>
+                  <b>{monthSummary ? tk(monthSummary.tot) : '৳0'}</b>
+                </div>
+                <div className="glass">
+                  <small>Meal Rate</small>
+                  <b>{monthSummary ? `${fm(monthSummary.rate)}৳` : '0৳'}</b>
+                </div>
               </div>
             </header>
 
-            <div className="st rv" style={{ animationDelay: '.05s' }}>
-              <span className="dot"></span>
-              {isOnline ? 'অনলাইন · রিয়েলটাইম সিঙ্ক সক্রিয়' : 'অফলাইন মোড · লোকাল ডাটা'}
-              <span>·</span>
-              মেস: {messState.mess} ({isManager ? 'ম্যানেজার' : 'মেম্বার'})
-            </div>
-
-            {/* Pending Offline Sync Notice Bar */}
-            {pendingSyncCount > 0 && (
-              <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs shadow-xs mb-3">
-                <span className="flex items-center gap-2">
-                  <span>🔄</span>
-                  <span><b>{pendingSyncCount}টি</b> পরিবর্তন অফলাইনে সংরক্ষিত আছে (অনলাইন হলে অটো-সিঙ্ক হবে)</span>
-                </span>
-                {isOnline && (
+            {/* Main Content Area */}
+            <div className="pg">
+              {/* My Summary Section */}
+              <section className="card">
+                <div className="row">
+                  <h2>My Summary</h2>
                   <button
-                    type="button"
-                    onClick={handleManualSync}
-                    disabled={isSyncing}
-                    className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-semibold text-[11px] cursor-pointer transition disabled:opacity-50"
-                  >
-                    {isSyncing ? 'সিঙ্ক হচ্ছে...' : 'এখনই সিঙ্ক করুন'}
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="me rv" style={{ animationDelay: '.08s' }}>
-              <span className="av">{(whoName[0] || 'U').toUpperCase()}</span>
-              <div>
-                <b>{whoName}</b>
-                <small>{isManager ? 'ম্যানেজার' : 'মেম্বার'} · {messState.mess}</small>
-              </div>
-              <span className="stamp">{isMonthLocked ? 'Closed' : 'Running'}</span>
-            </div>
-
-            <div className="grid g2c">
-              {/* Mess Balance: Notebook Page */}
-              <section className="card bal rv" style={{ animationDelay: '.12s' }}>
-                <span className="tape"></span>
-                <small>Mess Balance</small>
-                <div>
-                  <button
-                    className="btn pdf"
-                    disabled={isExportingPDF}
-                    onClick={handleDownloadGroupPDF}
-                    title="Download Group Mess Summary Report PDF"
-                  >
-                    <DashIcon name="pdf" size={16} />
-                    <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'Group PDF'}</span>
-                  </button>
-                </div>
-                <div className="big num">
-                  <AnimatedTk amount={monthSummary ? monthSummary.dep - monthSummary.tot : 0} />
-                </div>
-                <div className="bar" aria-hidden="true">
-                  <i style={{ width: barWidth }}></i>
-                </div>
-                <div className="tri">
-                  <div>
-                    <small>Deposit</small>
-                    <b className="num">
-                      <AnimatedTk amount={monthSummary ? monthSummary.dep : 0} />
-                    </b>
-                  </div>
-                  <div>
-                    <small>Total Cost</small>
-                    <b className="num">
-                      <AnimatedTk amount={monthSummary ? monthSummary.tot : 0} />
-                    </b>
-                  </div>
-                  <div>
-                    <small>Meal Rate</small>
-                    <b className="num">{monthSummary ? `${fm(monthSummary.rate)}৳` : '0৳'}</b>
-                  </div>
-                </div>
-              </section>
-
-              {/* My Personal Summary */}
-              <section className="card my rv" style={{ animationDelay: '.18s' }}>
-                <h2>
-                  My Summary
-                  <button
-                    className="btn"
+                    className="sm"
                     disabled={isExportingPDF}
                     onClick={() => handleDownloadIndividualPDF()}
                     title="Download Individual Monthly Expense & Meal Summary PDF"
                   >
-                    <DashIcon name="pdf" size={16} />
+                    <svg className="i" width="14" height="14"><use href="#pdf" /></svg>
                     <span>{isExportingPDF ? 'তৈরি হচ্ছে...' : 'My Report PDF'}</span>
                   </button>
-                </h2>
-                <div className="fig">
-                  <div>
-                    <b className="num">{fm(mySummary.meals)}</b>
+                </div>
+                <div className="g4">
+                  <div className="st">
                     <small>Meals</small>
+                    <b>{fm(mySummary.meals)}</b>
                   </div>
-                  <div>
-                    <b className="num">{tk(mySummary.dep)}</b>
+                  <div className="st">
                     <small>Deposit</small>
+                    <b>{tk(mySummary.dep)}</b>
                   </div>
-                  <div>
-                    <b className="num">{tk(mySummary.tot)}</b>
+                  <div className="st">
                     <small>Cost</small>
+                    <b>{tk(mySummary.tot)}</b>
                   </div>
-                  <div>
-                    <b className={`num ${mySummary.bal >= 0 ? 'pos' : 'neg'}`}>
-                      {tk(mySummary.bal)}
-                    </b>
+                  <div className="st hl">
                     <small>Balance</small>
+                    <b>{tk(mySummary.bal)}</b>
                   </div>
                 </div>
               </section>
-            </div>
 
-            {/* Quick Action Buttons & Payment Methods */}
-            <div className="grid" style={{ marginTop: '14px' }}>
-              <section className="card rv" style={{ animationDelay: '.24s' }}>
+              {/* Quick Action Grid */}
+              <section className="card">
                 <div className="qa">
                   {isManager ? (
                     <>
                       <button onClick={() => { setTab('meal'); setMealSubTab('add'); }}>
-                        <i><DashIcon name="bowl" size={24} /></i>
+                        <i style={{ background: '#E3F6EE', color: '#0B7A55' }}>
+                          <svg className="i" width="24" height="24"><use href="#bowl" /></svg>
+                        </i>
                         Add Meal
                       </button>
                       <button onClick={() => setTab('deposit')}>
-                        <i><DashIcon name="wal" size={24} /></i>
+                        <i style={{ background: '#E2F0FB', color: '#1F73B7' }}>
+                          <svg className="i" width="24" height="24"><use href="#wal" /></svg>
+                        </i>
                         Add Deposit
                       </button>
                       <button onClick={() => setTab('cost')}>
-                        <i><DashIcon name="cart" size={24} /></i>
+                        <i style={{ background: '#FFF1D6', color: '#B7791F' }}>
+                          <svg className="i" width="24" height="24"><use href="#cart" /></svg>
+                        </i>
                         Add Cost
                       </button>
                       <button onClick={() => { setTab('meal'); setMealSubTab('req'); }}>
-                        <i><DashIcon name="doc" size={24} /></i>
+                        <i style={{ background: '#ECE8FB', color: '#5B4BC4' }}>
+                          <svg className="i" width="24" height="24"><use href="#doc" /></svg>
+                        </i>
                         Request {pendingReqCount > 0 ? `(${pendingReqCount})` : ''}
                       </button>
                     </>
                   ) : (
                     <>
                       <button onClick={() => { setTab('meal'); setMealSubTab('req'); }}>
-                        <i><DashIcon name="bowl" size={24} /></i>
+                        <i style={{ background: '#E3F6EE', color: '#0B7A55' }}>
+                          <svg className="i" width="24" height="24"><use href="#bowl" /></svg>
+                        </i>
                         Add Meal
                       </button>
                       <button onClick={() => setTab('member_deposit')}>
-                        <i><DashIcon name="wal" size={24} /></i>
+                        <i style={{ background: '#E2F0FB', color: '#1F73B7' }}>
+                          <svg className="i" width="24" height="24"><use href="#wal" /></svg>
+                        </i>
                         Deposit
                       </button>
                       <button onClick={() => setTab('active')}>
-                        <i><DashIcon name="cart" size={24} /></i>
+                        <i style={{ background: '#FFF1D6', color: '#B7791F' }}>
+                          <svg className="i" width="24" height="24"><use href="#cart" /></svg>
+                        </i>
                         Cost Details
                       </button>
                       <button onClick={() => { setTab('meal'); setMealSubTab('req'); }}>
-                        <i><DashIcon name="doc" size={24} /></i>
+                        <i style={{ background: '#ECE8FB', color: '#5B4BC4' }}>
+                          <svg className="i" width="24" height="24"><use href="#doc" /></svg>
+                        </i>
                         Request
                       </button>
                     </>
@@ -2866,53 +2874,46 @@ export default function App() {
                 </div>
               </section>
 
-              {isManager ? (
-                <section
-                  className="card pay rv"
-                  style={{ animationDelay: '.28s' }}
-                  onClick={() => setTab('payment_methods')}
-                >
-                  <i><DashIcon name="wal" size={22} /></i>
-                  <div>
-                    <b>Payment Methods (পেমেন্ট মেথড)</b>
-                    <small>বিকাশ, নগদ, রকেট, উপায় ও ব্যাংক পেমেন্ট তথ্য এখানে</small>
+              {/* Payment Methods Card */}
+              <section
+                className="card pay"
+                onClick={() => setTab(isManager ? 'payment_methods' : 'member_deposit')}
+              >
+                <i><svg className="i" width="22" height="22"><use href="#wal" /></svg></i>
+                <div>
+                  <b>Payment Methods (পেমেন্ট মেথড)</b>
+                  <small>বিকাশ, নগদ, রকেট ও ব্যাংক তথ্য</small>
+                  <div className="dots">
+                    <s style={{ background: '#E2136E' }} />
+                    <s style={{ background: '#F6921E' }} />
+                    <s style={{ background: '#8C3494' }} />
+                    <s style={{ background: '#0F8A5F' }} />
                   </div>
-                  <div className="flex items-center gap-2 ml-auto">
-                    {pendingDepositCount > 0 && (
-                      <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-bold">
-                        {pendingDepositCount} নতুন জমা
-                      </span>
-                    )}
-                    <span className="tg">ম্যানেজার অপশন</span>
-                    <DashIcon name="chev" style={{ color: 'var(--g)' }} />
-                  </div>
-                </section>
-              ) : (
-                <section
-                  className="card pay rv"
-                  style={{ animationDelay: '.28s' }}
-                  onClick={() => setTab('member_deposit')}
-                >
-                  <i><DashIcon name="wal" size={22} /></i>
-                  <div>
-                    <b>Payment Methods (পেমেন্ট মেথড)</b>
-                    <small>বিকাশ, নগদ, রকেট, উপায় ও ব্যাংক পেমেন্ট তথ্য এখানে</small>
-                  </div>
-                  <DashIcon name="chev" className="i ml-auto" style={{ color: 'var(--g)' }} />
-                </section>
-              )}
-            </div>
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  {pendingDepositCount > 0 && isManager && (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500 text-white text-[11px] font-bold">
+                      {pendingDepositCount} নতুন জমা
+                    </span>
+                  )}
+                  <svg className="i" style={{ color: 'var(--mut)' }}><use href="#chev" /></svg>
+                </div>
+              </section>
 
-            {/* Today's Eaters & Daily Bazar */}
-            <div className="grid g3c" style={{ marginTop: '14px' }}>
-              <section className="card rv" style={{ animationDelay: '.32s' }}>
-                <h2>আজ কে কে খাচ্ছে <span className="chip">{TD}</span></h2>
-                <div className="chips" id="eat">
+              {/* Today's Eaters Strip */}
+              <section className="card">
+                <div className="row">
+                  <h2>আজ কে কে খাচ্ছে</h2>
+                  <span className="sm">{todayEaters.length} জন · {TD}</span>
+                </div>
+                <div className="strip" id="eat">
                   {todayEaters.length > 0 ? (
-                    todayEaters.map((m, i) => (
-                      <span key={m.id} style={{ animationDelay: `${0.4 + i * 0.05}s` }}>
-                        {m.name} <em>· {mt(todayMeals[m.id])} মিল</em>
-                      </span>
+                    todayEaters.map(m => (
+                      <div key={m.id} className="pp">
+                        <span>{(m.name[0] || '?').toUpperCase()}</span>
+                        <b>{m.name.split(' ')[0]}</b>
+                        <small>{mt(todayMeals[m.id])} মিল</small>
+                      </div>
                     ))
                   ) : (
                     <div className="text-xs text-[var(--mut)] py-2">আজ এখনো কোনো মিল যোগ হয়নি।</div>
@@ -2920,24 +2921,24 @@ export default function App() {
                 </div>
               </section>
 
-              <section className="card rv" style={{ animationDelay: '.36s' }}>
-                <h2>
-                  দৈনিক বাজার খরচ
-                  <span className="chip num">{monthSummary ? tk(monthSummary.tot) : '৳0'}</span>
-                </h2>
+              {/* Daily Bazar Expense Bars */}
+              <section className="card">
+                <div className="row">
+                  <h2>দৈনিক বাজার খরচ</h2>
+                  <span className="sm">মোট {monthSummary ? tk(monthSummary.tot) : '৳0'}</span>
+                </div>
                 <div className="bars" id="bars">
                   {Array.from({ length: 31 }, (_, i) => {
                     const amt = dailyBazarAmounts[i] || 0;
-                    const pct = maxBazar > 0 ? (amt / maxBazar) * 100 : 0;
+                    const isMax = maxBazar > 0 && amt === maxBazar && amt > 0;
+                    const heightPct = amt ? Math.max(6, (amt / maxBazar) * 88) : 2;
                     return (
                       <i
                         key={i}
-                        data-t={`${i + 1} তারিখ: ${tk(amt)}`}
-                        style={{
-                          height: `${amt ? Math.max(4, pct) : 2}%`,
-                          animationDelay: `${0.5 + i * 0.015}s`,
-                          opacity: amt ? 0.88 : 0.25,
-                        }}
+                        className={`${amt ? (isMax ? 'mx' : '') : 'z'}`}
+                        data-v={isMax ? tk(amt) : undefined}
+                        title={`${i + 1} তারিখ: ${tk(amt)}`}
+                        style={{ height: `${heightPct}%` }}
                       />
                     );
                   })}
@@ -2945,137 +2946,153 @@ export default function App() {
                 <div className="ax">
                   <span>১</span><span>৮</span><span>১৫</span><span>২২</span><span>৩১</span>
                 </div>
+                <div className="kv">
+                  <span>গড় <b>{tk(Math.round(dailyBazarAmounts.filter(x => x > 0).reduce((a, b) => a + b, 0) / (dailyBazarAmounts.filter(x => x > 0).length || 1)))}</b></span>
+                  <span>সর্বোচ্চ <b>{tk(maxBazar > 1 ? maxBazar : 0)}</b></span>
+                </div>
               </section>
-            </div>
 
-            {/* Notices Board */}
-            <section className="card rv" style={{ marginTop: '14px', animationDelay: '.4s' }}>
-              <h2>
-                <span>নোটিশ</span>
-                {isManager && (
-                  <button
-                    className="btn p"
-                    onClick={() => {
-                      setModalConfig({
-                        isOpen: true,
-                        title: 'নতুন নোটিশ',
-                        fields: [{ k: 'text', l: 'নোটিশ বার্তা', t: 'textarea', placeholder: 'বার্তা লিখুন...' }],
-                        onConfirm: (vals) => {
-                          if (!vals.text?.trim()) return false;
-                          const newNotice: Notice = {
-                            id: uid(),
-                            text: vals.text.trim(),
-                            date: TD,
-                          };
-                          createNotification({
-                            type: 'notice',
-                            title: `📢 নতুন মেস নোটিশ`,
-                            body: vals.text.trim(),
-                            actorId: user?.uid,
-                            actorName: user?.displayName || 'ম্যানেজার',
-                          }).then(notif => {
-                            saveStateToFirestore(
-                              {
-                                ...messState,
-                                notices: [...messState.notices, newNotice],
-                                notifications: notif
-                                  ? [notif, ...(messState.notifications || [])].slice(0, 100)
-                                  : messState.notifications,
-                              },
-                              'নোটিশ প্রকাশ করা হয়েছে'
-                            );
-                          });
-                        },
-                      });
-                    }}
-                  >
-                    + নতুন
-                  </button>
+              {/* Notices Board */}
+              <section className="card">
+                <div className="row">
+                  <h2>নোটিশ</h2>
+                  {isManager && (
+                    <button
+                      className="sm"
+                      onClick={() => {
+                        setModalConfig({
+                          isOpen: true,
+                          title: 'নতুন নোটিশ',
+                          fields: [{ k: 'text', l: 'নোটিশ বার্তা', t: 'textarea', placeholder: 'বার্তা লিখুন...' }],
+                          onConfirm: (vals) => {
+                            if (!vals.text?.trim()) return false;
+                            const newNotice: Notice = {
+                              id: uid(),
+                              text: vals.text.trim(),
+                              date: TD,
+                            };
+                            createNotification({
+                              type: 'notice',
+                              title: `📢 নতুন মেস নোটিশ`,
+                              body: vals.text.trim(),
+                              actorId: user?.uid,
+                              actorName: user?.displayName || 'ম্যানেজার',
+                            }).then(notif => {
+                              saveStateToFirestore(
+                                {
+                                  ...messState,
+                                  notices: [...messState.notices, newNotice],
+                                  notifications: notif
+                                    ? [notif, ...(messState.notifications || [])].slice(0, 100)
+                                    : messState.notifications,
+                                },
+                                'নোটিশ প্রকাশ করা হয়েছে'
+                              );
+                            });
+                          },
+                        });
+                      }}
+                    >
+                      + নতুন
+                    </button>
+                  )}
+                </div>
+                {messState.notices && messState.notices.length > 0 ? (
+                  <div className="space-y-2 mt-3">
+                    {messState.notices.slice().reverse().map(n => (
+                      <div key={n.id} className="row p-2.5 rounded-xl bg-[var(--line)]/20 border border-[var(--line)]">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm m-0 break-words">{n.text}</p>
+                          <small className="text-[var(--mut)] text-xs">{n.date}</small>
+                        </div>
+                        {isManager && (
+                          <button
+                            className="w-6 h-6 rounded-full bg-[var(--line)] flex items-center justify-center text-xs font-bold hover:bg-red-500 hover:text-white transition cursor-pointer ml-2"
+                            onClick={() => {
+                              const updated = messState.notices.filter(x => x.id !== n.id);
+                              saveStateToFirestore({ ...messState, notices: updated }, 'নোটিশ মুছে ফেলা হয়েছে');
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="empty">
+                    <svg viewBox="0 0 64 64">
+                      <rect x="12" y="8" width="40" height="48" rx="7" />
+                      <path d="M22 22h20M22 31h20M22 40h12" />
+                    </svg>
+                    কোনো নোটিশ নেই
+                  </div>
                 )}
-              </h2>
-              {messState.notices && messState.notices.length > 0 ? (
-                <div className="space-y-2 mt-2">
-                  {messState.notices.slice().reverse().map(n => (
-                    <div key={n.id} className="row">
-                      <div className="g1">
-                        <p className="font-medium text-sm m-0">{n.text}</p>
-                        <small>{n.date}</small>
-                      </div>
-                      {isManager && (
-                        <button
-                          className="btn g s"
-                          onClick={() => {
-                            const updated = messState.notices.filter(x => x.id !== n.id);
-                            saveStateToFirestore({ ...messState, notices: updated }, 'নোটিশ মুছে ফেলা হয়েছে');
-                          }}
-                        >
-                          ✕
-                        </button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty">
-                  <svg viewBox="0 0 64 48">
-                    <rect x="12" y="6" width="40" height="36" rx="5" />
-                    <path d="M20 18h24M20 26h16M44 36l8-8M50 30l3 3" />
-                  </svg>
-                  <div>কোনো নোটিশ নেই</div>
-                </div>
-              )}
-            </section>
+              </section>
 
-            {/* Members Section */}
-            <div className="mh">
-              <h2>সদস্যবৃন্দ ({messState.members.length})</h2>
-              <a href="#" onClick={(e) => { e.preventDefault(); setTab('members'); }}>সব দেখুন</a>
-            </div>
+              {/* Members Details Accordion List */}
+              <div className="row" style={{ padding: '6px 2px 0' }}>
+                <h2>সদস্যবৃন্দ ({messState.members.length})</h2>
+                <button
+                  className="sm"
+                  onClick={() => setTab('members')}
+                >
+                  সব দেখুন
+                </button>
+              </div>
 
-            <div className="mg" id="mg">
-              {messState.members.map((m, i) => {
-                const mSummary = monthSummary?.mm[m.id] || {
-                  meals: 0,
-                  dep: 0,
-                  cost: 0,
-                  ind: 0,
-                  sh: 0,
-                  tot: 0,
-                  bal: 0,
-                };
-                const b = mSummary.bal;
-                return (
-                  <article
-                    key={m.id}
-                    className="card m"
-                    style={{ animationDelay: `${0.45 + i * 0.06}s` }}
-                    onClick={() => {
-                      setDetailMemberId(m.id);
-                      setTab('detail');
-                    }}
-                  >
-                    <div className="mt">
-                      <span className="av">{(m.name[0] || '?').toUpperCase()}</span>
-                      <div>
-                        <b>{m.name}</b>
-                        <small>
-                          {m.id === messState.mgr && <span className="tag">Manager</span>}
-                          {m.room || 'Room -'}
-                        </small>
+              <section className="card pl" id="mg">
+                {messState.members.map(m => {
+                  const mSummary = monthSummary?.mm[m.id] || {
+                    meals: 0,
+                    dep: 0,
+                    cost: 0,
+                    ind: 0,
+                    sh: 0,
+                    tot: 0,
+                    bal: 0,
+                  };
+                  const b = mSummary.bal;
+                  return (
+                    <details key={m.id}>
+                      <summary>
+                        <span className="mav">{(m.name[0] || '?').toUpperCase()}</span>
+                        <div className="n">
+                          <b>
+                            {m.name}
+                            {m.id === messState.mgr && <span className="tag">Manager</span>}
+                          </b>
+                          <small>{m.room || 'Room -'} · মিল {fm(mSummary.meals)}</small>
+                        </div>
+                        <span className={`bp ${b >= 0 ? 'p' : 'n'}`}>
+                          {tk(b)}
+                        </span>
+                      </summary>
+                      <div className="dt">
+                        <div className="r"><span>মোট মিল</span><b>{fm(mSummary.meals)}</b></div>
+                        <div className="r"><span>মোট জমা</span><b>{tk(mSummary.dep)}</b></div>
+                        <div className="r"><span>মিল বাবদ খরচ</span><b>{tk(mSummary.cost)}</b></div>
+                        <div className="r"><span>শেয়ার্ড খরচ</span><b>{tk(mSummary.sh)}</b></div>
+                        <div className="r t"><span>মোট খরচ</span><b>{tk(mSummary.tot)}</b></div>
+                        <div className="mt-2 pt-2 border-t border-[var(--line)] flex justify-end">
+                          <button
+                            type="button"
+                            className="text-xs text-[var(--g)] font-bold hover:underline cursor-pointer"
+                            onClick={() => {
+                              setDetailMemberId(m.id);
+                              setTab('detail');
+                            }}
+                          >
+                            বিস্তারিত হিসাব দেখুন →
+                          </button>
+                        </div>
                       </div>
-                      <div className="bl">
-                        <small>ব্যালেন্স</small>
-                        <b className={b >= 0 ? 'pos' : 'neg'}>{tk(b)}</b>
-                      </div>
-                    </div>
-                    <div className="r"><span>মোট মিল</span><b className="num">{fm(mSummary.meals)}</b></div>
-                    <div className="r"><span>মোট জমা</span><b className="num">{tk(mSummary.dep)}</b></div>
-                    <div className="r"><span>মিল বাবদ খরচ</span><b className="num">{tk(mSummary.cost)}</b></div>
-                    <div className="r"><span>শেয়ার্ড খরচ</span><b className="num">{tk(mSummary.sh)}</b></div>
-                    <div className="r t"><span>মোট খরচ</span><b className="num">{tk(mSummary.tot)}</b></div>
-                  </article>
-                );
-              })}
+                    </details>
+                  );
+                })}
+              </section>
+
+              <div className="sp" />
             </div>
           </div>
         )}
@@ -5374,6 +5391,7 @@ export default function App() {
         readIds={readNotificationIds}
         onMarkAllAsRead={handleMarkAllAsRead}
         onMarkAsRead={handleMarkAsRead}
+        messName={messState.mess}
         onNavigateTab={(targetTab) => {
           setTab(targetTab as any);
           setDrawerOpen(false);
