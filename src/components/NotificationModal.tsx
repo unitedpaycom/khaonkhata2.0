@@ -12,34 +12,43 @@ interface NotificationModalProps {
   messName?: string;
 }
 
-const TABS: [string, string][] = [
-  ['all', 'সকল'],
-  ['meal', 'মিল'],
-  ['deposit', 'পেমেন্ট'],
-  ['system', 'সিস্টেম'],
-];
+const TY: Record<string, [string, string]> = {
+  deposit: ['wal', 'জমা'],
+  meal: ['bowl', 'মিল'],
+  cost: ['cart', 'খরচ'],
+  expense: ['cart', 'খরচ'],
+  member: ['users', 'সদস্য'],
+  req: ['req', 'রিকোয়েস্ট'],
+  push: ['send', 'পুশ'],
+  system: ['bell', 'সিস্টেম'],
+  notice: ['note', 'নোটিশ'],
+};
 
-function bn(n: number | string): string {
-  return String(n).replace(/\d/g, d => '০১২৩৪৫৬৭৮৯'[+d] || d);
-}
-
-function ago(timeStr: string | number | undefined): string {
-  if (!timeStr) return 'এইমাত্র';
-  const t = typeof timeStr === 'number' ? timeStr : new Date(timeStr).getTime();
+function rel(ts?: string | number): string {
+  if (!ts) return 'এইমাত্র';
+  const t = typeof ts === 'number' ? ts : new Date(ts).getTime();
   const s = Math.floor((Date.now() - t) / 1000);
   if (isNaN(s) || s < 60) return 'এইমাত্র';
-  if (s < 3600) return bn(Math.floor(s / 60)) + ' মিনিট আগে';
-  if (s < 86400) return bn(Math.floor(s / 3600)) + ' ঘণ্টা আগে';
-  return bn(Math.floor(s / 86400)) + ' দিন আগে';
+  if (s < 3600) return Math.floor(s / 60) + ' মিনিট আগে';
+  if (s < 86400) return Math.floor(s / 3600) + ' ঘণ্টা আগে';
+  return Math.floor(s / 86400) + ' দিন আগে';
 }
 
-function dayLabel(timeStr: string | number | undefined): string {
-  if (!timeStr) return 'আজ';
-  const t = typeof timeStr === 'number' ? timeStr : new Date(timeStr).getTime();
-  const diffDays = Math.round(
-    (new Date().setHours(0, 0, 0, 0) - new Date(t).setHours(0, 0, 0, 0)) / 86400000
-  );
-  return diffDays <= 0 ? 'আজ' : diffDays === 1 ? 'গতকাল' : 'আগের';
+function dayKey(ts?: string | number): string {
+  if (!ts) return 'আজ';
+  const t = typeof ts === 'number' ? ts : new Date(ts).getTime();
+  const d = new Date(t);
+  const now = new Date();
+  const a = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const b = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const n = Math.round((b.getTime() - a.getTime()) / 864e5);
+  return n <= 0 ? 'আজ' : n === 1 ? 'গতকাল' : d.getDate() + '/' + (d.getMonth() + 1) + '/' + d.getFullYear();
+}
+
+function clock(ts?: string | number): string {
+  if (!ts) return '';
+  const t = typeof ts === 'number' ? ts : new Date(ts).getTime();
+  return new Date(t).toLocaleTimeString('bn-BD', { hour: 'numeric', minute: '2-digit' });
 }
 
 export const NotificationModal: React.FC<NotificationModalProps> = ({
@@ -52,249 +61,271 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   onNavigateTab,
   messName = 'White House',
 }) => {
-  const [activeTab, setActiveTab] = useState('all');
-  const [openGroupKeys, setOpenGroupKeys] = useState<Record<string, boolean>>({});
+  const [filter, setFilter] = useState<'all' | 'deposit' | 'meal' | 'cost' | 'member'>('all');
+  const [selectedNotif, setSelectedNotif] = useState<MessNotification | null>(null);
 
   if (!isOpen) return null;
 
   const unreadCount = notifications.filter(n => !readIds.has(n.id)).length;
 
-  // Filter list by selected tab
-  const filteredList = notifications
-    .filter(item => {
-      if (activeTab === 'all') return true;
-      if (activeTab === 'meal') return item.type === 'meal';
-      if (activeTab === 'deposit') return item.type === 'deposit';
-      if (activeTab === 'system') return item.type === 'system' || item.type === 'notice' || item.type === 'expense';
-      return item.type === activeTab;
-    })
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-  // Group by day section
-  const sections: Record<string, MessNotification[]> = {};
-  const sectionOrder: string[] = [];
-  filteredList.forEach(item => {
-    const d = dayLabel(item.createdAt);
-    if (!sections[d]) {
-      sections[d] = [];
-      sectionOrder.push(d);
-    }
-    sections[d].push(item);
+  const filtered = notifications.filter(n => {
+    if (filter === 'all') return true;
+    if (filter === 'deposit') return n.type === 'deposit';
+    if (filter === 'meal') return n.type === 'meal';
+    if (filter === 'cost') return n.type === 'expense' || n.type === 'cost';
+    if (filter === 'member') return n.type === 'member';
+    return true;
   });
 
-  const toggleGroup = (k: string) => {
-    setOpenGroupKeys(prev => ({ ...prev, [k]: !prev[k] }));
-  };
+  // Group by day key
+  const groups: Record<string, MessNotification[]> = {};
+  filtered.forEach(n => {
+    const k = dayKey(n.createdAt);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(n);
+  });
 
-  const handleRowClick = (n: MessNotification) => {
+  const handleOpenDetail = (n: MessNotification) => {
     onMarkAsRead(n.id);
-    if (onNavigateTab) {
-      if (n.type === 'meal') {
-        onNavigateTab('meal');
-        onClose();
-      } else if (n.type === 'deposit') {
-        onNavigateTab('member_deposit');
-        onClose();
-      } else if (n.type === 'expense') {
-        onNavigateTab('cost');
-        onClose();
-      } else if (n.type === 'notice') {
-        onNavigateTab('home');
-        onClose();
-      }
-    }
+    setSelectedNotif(n);
   };
 
-  const renderSingleRow = (n: MessNotification) => {
-    const isUnread = !readIds.has(n.id);
-    const who = n.actorName || 'সদস্য';
-    const firstChar = who.trim().charAt(0) || 'U';
-
-    let titleNode: React.ReactNode = null;
-    let subNode: React.ReactNode = null;
-
-    if (n.type === 'meal') {
-      const slotData = (n.slot || n.metadata?.slot) as Record<string, any> | undefined;
-      const morning = slotData?.b ?? slotData?.m ?? 0;
-      const lunch = slotData?.l ?? 0;
-      const dinner = slotData?.d ?? 0;
-      const totalMeal = (morning + lunch + dinner);
-
-      titleNode = (
-        <span className="ti">
-          <b>{who}</b>-এর মিল আপডেট
-        </span>
-      );
-
-      subNode = (
-        <span className="ml">
-          <span className="mc"><small>সকাল</small><b>{bn(morning)}</b></span>
-          <span className="mc"><small>দুপুর</small><b>{bn(lunch)}</b></span>
-          <span className="mc"><small>রাত</small><b>{bn(dinner)}</b></span>
-          <span className="st">মোট<b>{bn(totalMeal)}</b></span>
-        </span>
-      );
-    } else if (n.type === 'deposit') {
-      const amt = n.amount || 0;
-      titleNode = (
-        <span className="ti">
-          <b>৳{bn(amt.toLocaleString('en-US'))}</b> জমা হয়েছে
-        </span>
-      );
-      subNode = (
-        <span className="sb">
-          {who} · {n.body || 'জমা রেকর্ড নিশ্চিত করা হয়েছে'}
-        </span>
-      );
-    } else {
-      titleNode = (
-        <span className="ti">
-          <b>{n.title || 'সিস্টেম বার্তা'}</b>
-        </span>
-      );
-      subNode = (
-        <span className="sb">{n.body || ''}</span>
-      );
-    }
-
-    return (
-      <button
-        key={n.id}
-        type="button"
-        className={`r ${isUnread ? 'un' : ''}`}
-        onClick={() => handleRowClick(n)}
-      >
-        <span className="av">
-          {n.type === 'meal' ? (
-            firstChar
-          ) : n.type === 'deposit' ? (
-            <svg viewBox="0 0 24 24">
-              <path d="M4 7.5A2.5 2.5 0 0 1 6.5 5H18v3" />
-              <path d="M4 7.5V17a2 2 0 0 0 2 2h12a1 1 0 0 0 1-1V9a1 1 0 0 0-1-1H6.5A2.5 2.5 0 0 1 4 7.5z" />
-              <circle cx="15.5" cy="13.5" r=".6" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24">
-              <path d="M6 9a6 6 0 1 1 12 0c0 6 2 7.5 2 7.5H4S6 15 6 9z" />
-              <path d="M10 20a2 2 0 0 0 4 0" />
-            </svg>
-          )}
-        </span>
-        <span className="b">
-          <span className="l1">
-            {titleNode}
-            <time className="tm">{ago(n.createdAt)}</time>
-          </span>
-          {subNode}
-        </span>
-      </button>
-    );
+  // Target tab for selected notification
+  const getTargetTab = (n: MessNotification): string | null => {
+    if (n.type === 'meal') return 'meal';
+    if (n.type === 'deposit') return 'deposit';
+    if (n.type === 'expense' || n.type === 'cost') return 'cost';
+    if (n.type === 'member') return 'members';
+    return null;
   };
 
   return (
-    <div
-      className="notif-panel-ov ov"
-      id="ov"
-      onClick={(e) => {
-        if ((e.target as HTMLElement).id === 'ov') onClose();
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-label="নোটিফিকেশন প্যানেল"
-    >
-      <section className="notif-panel-sh sh" onClick={(e) => e.stopPropagation()}>
-        <span className="tp" aria-hidden="true" />
-        
-        {/* Header */}
-        <header className="hd">
-          <div className="t">
-            <h2>নোটিফিকেশন</h2>
-            <svg className="wv-s" viewBox="0 0 118 8" aria-hidden="true">
-              <path className="wv" d="M2 4Q11 0 20 4T38 4T56 4T74 4T92 4T116 4" />
-            </svg>
-            <p>
-              {messName}
-              {unreadCount > 0 ? (
-                <> · <b>{bn(unreadCount)}টি অপঠিত</b></>
-              ) : (
-                <> · সব পড়া হয়েছে</>
-              )}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            className="pill"
-            id="all"
-            disabled={unreadCount === 0}
-            onClick={onMarkAllAsRead}
-            title="সবগুলো নোটিফিকেশন পঠিত হিসেবে চিহ্নিত করুন"
-          >
-            <svg viewBox="0 0 24 24" className="w-4 h-4">
-              <path d="M3 12.5l4.5 4.5L14 9.5" />
-              <path d="M11 16.5l.5.5L20 7.5" />
-            </svg>
-            সব পঠিত
+    <div className="kk">
+      <div className={`kk-sx ${isOpen ? 'kk-open' : ''}`} role="dialog" aria-modal="true" aria-hidden={!isOpen}>
+        <div className="kk-ov" onClick={onClose}></div>
+        <div className="kk-bs" id="kk-bs">
+          <div className="kk-grab"></div>
+          <button className="kk-bsx" onClick={onClose} aria-label="বন্ধ করুন">
+            <svg className="kk-i" width="18" height="18"><use href="#kk-x" /></svg>
           </button>
 
-          <button
-            type="button"
-            className="x"
-            id="x"
-            aria-label="বন্ধ করুন"
-            onClick={onClose}
-          >
-            <svg viewBox="0 0 24 24" className="w-4 h-4">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
-        </header>
+          {selectedNotif ? (
+            /* Notification Detail View */
+            <div className="kk-nd">
+              {(() => {
+                const n = selectedNotif;
+                const typeInfo = TY[n.type] || ['bell', 'নোটিফিকেশন'];
+                const actor = n.actorName || 'ব্যবহারকারী';
+                const initial = (actor.trim()[0] || 'U').toUpperCase();
+                const navTab = getTargetTab(n);
 
-        {/* Tab Filters */}
-        <nav className="tabs" role="tablist">
-          {TABS.map(([tKey, tLabel]) => {
-            const count = notifications.filter(n => {
-              if (tKey === 'all') return true;
-              if (tKey === 'meal') return n.type === 'meal';
-              if (tKey === 'deposit') return n.type === 'deposit';
-              if (tKey === 'system') return n.type === 'system' || n.type === 'notice' || n.type === 'expense';
-              return n.type === tKey;
-            }).length;
+                // Build fields
+                const fields: [string, string][] = [];
+                if (n.actorName) fields.push(['সদস্য / প্রেরক', n.actorName]);
+                if (n.amount) fields.push(['পরিমাণ', `৳${Math.round(n.amount).toLocaleString('en-IN')}`]);
+                if (n.type === 'meal') {
+                  const s = n.slot || n.metadata?.slot;
+                  if (s) {
+                    const b = (s.b || s.m || 0);
+                    const l = (s.l || 0);
+                    const d = (s.d || 0);
+                    fields.push(['সকাল / দুপুর / রাত', `${b} / ${l} / ${d}`]);
+                    fields.push(['মোট মিল', `${b + l + d} মিল`]);
+                  }
+                }
+                if (n.body) fields.push(['বিবরণ', n.body]);
 
-            const isSelected = activeTab === tKey;
+                return (
+                  <>
+                    <div className="kk-ndh">
+                      <span className={`kk-ti kk-t-${n.type === 'expense' ? 'cost' : n.type === 'deposit' ? 'dep' : n.type === 'member' ? 'mem' : n.type}`}>
+                        <svg className="kk-i" width="28" height="28"><use href={`#kk-${typeInfo[0]}`} /></svg>
+                      </span>
+                      <h3>{n.title}</h3>
+                      <small>
+                        {typeInfo[1]} · {new Date(n.createdAt).toLocaleDateString('bn-BD', { day: 'numeric', month: 'long', year: 'numeric' })}, {clock(n.createdAt)} · {rel(n.createdAt)}
+                      </small>
+                      {n.amount ? (
+                        <div className={`kk-nbig ${n.type === 'deposit' ? 'kk-pos' : n.type === 'expense' ? 'kk-neg' : 'kk-neu'}`}>
+                          {n.type === 'deposit' ? '+' : n.type === 'expense' ? '−' : ''}৳{Math.round(n.amount).toLocaleString('en-IN')}
+                        </div>
+                      ) : n.type === 'meal' ? (
+                        <div className="kk-nbig kk-neu">
+                          {(() => {
+                            const s = n.slot || n.metadata?.slot;
+                            const tot = s ? (s.b || s.m || 0) + (s.l || 0) + (s.d || 0) : 0;
+                            return `${tot} মিল`;
+                          })()}
+                        </div>
+                      ) : null}
+                    </div>
 
-            return (
-              <button
-                key={tKey}
-                role="tab"
-                aria-selected={isSelected}
-                className={`tab ${isSelected ? 'on' : ''}`}
-                onClick={() => setActiveTab(tKey)}
-              >
-                {tLabel}
-                <small>{bn(count)}</small>
-              </button>
-            );
-          })}
-        </nav>
+                    <div className="kk-nb">
+                      <div className="kk-card">
+                        <div className="kk-who">
+                          <span className="kk-mav">{initial}</span>
+                          <div>
+                            <small>আপডেট করেছেন</small>
+                            <b>{actor}</b>
+                          </div>
+                        </div>
+                      </div>
 
-        {/* Notification List Body with red margin notebook line */}
-        <div className="ls">
-          {sectionOrder.length === 0 ? (
-            <p className="em">কোনো নোটিফিকেশন নেই</p>
+                      {fields.length > 0 && (
+                        <div className="kk-card">
+                          <span className="kk-lb">বিস্তারিত তথ্য</span>
+                          <div className="kk-cg">
+                            {fields.map(([k, v]) => (
+                              <div key={k}>
+                                <span>{k}</span>
+                                <em style={{ textAlign: 'right' }}>{v}</em>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="kk-bg3">
+                        {navTab && onNavigateTab ? (
+                          <button
+                            type="button"
+                            className="kk-btn"
+                            onClick={() => {
+                              onNavigateTab(navTab);
+                              onClose();
+                            }}
+                          >
+                            <svg className="kk-i" width="18" height="18"><use href="#kk-arr" /></svg>
+                            পেজে যান
+                          </button>
+                        ) : <span />}
+                        <button
+                          type="button"
+                          className="kk-btn kk-gh"
+                          onClick={() => setSelectedNotif(null)}
+                        >
+                          তালিকায় ফিরুন
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
           ) : (
-            sectionOrder.map(secKey => {
-              const itemsInSec = sections[secKey];
-              return (
-                <div key={secKey}>
-                  <h3 className="dy">{secKey}</h3>
-                  {itemsInSec.map(item => renderSingleRow(item))}
+            /* Notification List View */
+            <div className="kk-bp" style={{ padding: '16px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ margin: 0, padding: 0 }}>
+                  নোটিফিকেশন {unreadCount > 0 ? `(${unreadCount})` : ''}
+                </h3>
+                {unreadCount > 0 && (
+                  <button
+                    type="button"
+                    className="kk-hl"
+                    onClick={onMarkAllAsRead}
+                    style={{ padding: '4px 8px', fontSize: 13, cursor: 'pointer' }}
+                  >
+                    <svg className="kk-i" width="16" height="16"><use href="#kk-check" /></svg>
+                    সব পড়া হয়েছে
+                  </button>
+                )}
+              </div>
+
+              {/* Filter Tabs */}
+              <div className="kk-tabs" style={{ margin: '0 -14px 12px', padding: '2px 14px 6px' }}>
+                <button
+                  type="button"
+                  className={filter === 'all' ? 'kk-on' : ''}
+                  onClick={() => setFilter('all')}
+                >
+                  সব {unreadCount > 0 && <em>{unreadCount}</em>}
+                </button>
+                <button
+                  type="button"
+                  className={filter === 'deposit' ? 'kk-on' : ''}
+                  onClick={() => setFilter('deposit')}
+                >
+                  জমা
+                </button>
+                <button
+                  type="button"
+                  className={filter === 'meal' ? 'kk-on' : ''}
+                  onClick={() => setFilter('meal')}
+                >
+                  মিল
+                </button>
+                <button
+                  type="button"
+                  className={filter === 'cost' ? 'kk-on' : ''}
+                  onClick={() => setFilter('cost')}
+                >
+                  খরচ
+                </button>
+                <button
+                  type="button"
+                  className={filter === 'member' ? 'kk-on' : ''}
+                  onClick={() => setFilter('member')}
+                >
+                  সদস্য
+                </button>
+              </div>
+
+              {/* Grouped Notification List */}
+              {Object.keys(groups).length > 0 ? (
+                Object.entries(groups).map(([dateLabel, items]) => (
+                  <div key={dateLabel} className="kk-sec" style={{ marginTop: 0, marginBottom: 14 }}>
+                    <div className="kk-card kk-nh">
+                      <div className="kk-dg">
+                        <b>{dateLabel}</b>
+                        <span>{items.length} টি</span>
+                      </div>
+                      {items.map(item => {
+                        const isUnread = !readIds.has(item.id);
+                        const typeInfo = TY[item.type] || ['bell', 'বার্তা'];
+                        const iconType = item.type === 'expense' ? 'cost' : item.type === 'deposit' ? 'dep' : item.type === 'member' ? 'mem' : item.type;
+
+                        return (
+                          <button
+                            key={item.id}
+                            type="button"
+                            className={`kk-nf ${isUnread ? 'kk-un' : ''}`}
+                            onClick={() => handleOpenDetail(item)}
+                          >
+                            <span className={`kk-ti kk-t-${iconType}`}>
+                              <svg className="kk-i" width="22" height="22"><use href={`#kk-${typeInfo[0]}`} /></svg>
+                            </span>
+                            <div className="kk-n">
+                              <b>{item.title}</b>
+                              <small>{item.body || item.actorName || ''}</small>
+                              <span className="kk-tm">{rel(item.createdAt)}</span>
+                            </div>
+                            {item.amount ? (
+                              <div className="kk-bv">
+                                <b className={item.type === 'deposit' ? 'kk-pos' : item.type === 'expense' ? 'kk-neg' : ''}>
+                                  {item.type === 'deposit' ? '+' : item.type === 'expense' ? '−' : ''}৳{Math.round(item.amount).toLocaleString('en-IN')}
+                                </b>
+                              </div>
+                            ) : null}
+                            <svg className="kk-i" width="16" height="16"><use href="#kk-chev" /></svg>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="kk-card">
+                  <div className="kk-em0">
+                    <i><svg className="kk-i" width="24" height="24"><use href="#kk-bell" /></svg></i>
+                    এই ফিল্টারে কোনো নোটিফিকেশন নেই
+                  </div>
                 </div>
-              );
-            })
+              )}
+            </div>
           )}
         </div>
-      </section>
+      </div>
     </div>
   );
 };

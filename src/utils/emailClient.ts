@@ -5,7 +5,8 @@ import type { EmailPayload } from '../types';
  * This works seamlessly on Vercel Serverless Functions and local Express dev server.
  */
 export async function dispatchEmailNotification(payload: EmailPayload): Promise<{ success: boolean; message?: string }> {
-  if (!payload.to || !payload.to.includes('@')) {
+  const cleanTo = (payload.to || '').trim().toLowerCase();
+  if (!cleanTo || !cleanTo.includes('@') || cleanTo.endsWith('@example.com') || cleanTo.endsWith('@test.com')) {
     // If no valid email address is provided, skip silently
     return { success: false, message: 'No valid recipient email provided.' };
   }
@@ -18,6 +19,7 @@ export async function dispatchEmailNotification(payload: EmailPayload): Promise<
       },
       body: JSON.stringify({
         ...payload,
+        to: cleanTo,
         appUrl: typeof window !== 'undefined' ? window.location.origin : undefined,
       }),
     });
@@ -172,7 +174,8 @@ export async function sendMemberDailyMessUpdate(params: {
   date?: string;
   messName?: string;
 }): Promise<{ success: boolean; message?: string; error?: string; id?: string }> {
-  if (!params.to || !params.to.includes('@')) {
+  const cleanTo = (params.to || '').trim().toLowerCase();
+  if (!cleanTo || !cleanTo.includes('@') || cleanTo.endsWith('@example.com') || cleanTo.endsWith('@test.com')) {
     return { success: false, error: 'মেম্বারের কোনো বৈধ ইমেইল এড্রেস নেই।' };
   }
 
@@ -183,7 +186,7 @@ export async function sendMemberDailyMessUpdate(params: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        to: params.to.trim(),
+        to: cleanTo,
         userName: String(params.userName || 'মেম্বার').trim(),
         dailyMeals: String(params.dailyMeals ?? '0').trim(),
         totalDeposit: String(Math.round(Number(params.totalDeposit) || 0)).trim(),
@@ -243,9 +246,9 @@ export async function sendBatchMemberDailyMessUpdates(
   for (let i = 0; i < membersList.length; i++) {
     const member = membersList[i];
     const memberName = member.userName || 'সদস্য';
-    const targetEmail = (member.to || '').trim();
+    const targetEmail = (member.to || '').trim().toLowerCase();
 
-    if (!targetEmail || !targetEmail.includes('@')) {
+    if (!targetEmail || !targetEmail.includes('@') || targetEmail.endsWith('@example.com') || targetEmail.endsWith('@test.com')) {
       console.warn(`[Batch Email] ⚠️ Skipped member: "${memberName}" (No valid email)`);
       failed.push({
         name: memberName,

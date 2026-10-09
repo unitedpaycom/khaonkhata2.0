@@ -18,6 +18,7 @@ export interface Deposit {
   amt: number;
   date: string; // YYYY-MM-DD
   note?: string;
+  mt?: string; // payment method: Cash, bKash, Nagad, etc.
 }
 
 export interface BazarItem {
@@ -35,6 +36,7 @@ export interface OtherCost {
   amt: number;
   type: 'shared' | 'ind';
   m?: string; // member id if individual
+  cat?: string; // category: গ্যাস, বিদ্যুৎ, ইত্যাদি
 }
 
 export interface MealSlot {
@@ -101,7 +103,7 @@ export interface MemberDepositRequest {
   reviewedBy?: string;
 }
 
-export type NotificationType = 'meal' | 'deposit' | 'expense' | 'notice' | 'system';
+export type NotificationType = 'meal' | 'deposit' | 'expense' | 'notice' | 'system' | 'cost' | 'member';
 
 export interface MessNotification {
   id: string;

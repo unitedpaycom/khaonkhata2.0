@@ -40,10 +40,10 @@ async function sendSingleMessUpdateEmail(
   const messTitle = memberData.messName ? String(memberData.messName).trim() : 'KhaonKhata';
   const targetDate = memberData.date || new Date().toISOString().split('T')[0];
 
-  if (!toEmail || !/^\S+@\S+\.\S+$/.test(toEmail)) {
+  if (!toEmail || !/^\S+@\S+\.\S+$/.test(toEmail) || toEmail.endsWith('@example.com') || toEmail.endsWith('@test.com')) {
     return {
       success: false,
-      error: `Invalid or missing email address for member: ${memberName} (${toEmail || 'none'})`,
+      error: `Invalid or placeholder email address for member: ${memberName} (${toEmail || 'none'})`,
     };
   }
 
@@ -64,6 +64,10 @@ async function sendSingleMessUpdateEmail(
         variables: templateVariables,
       },
     } as any);
+
+    if (result?.error) {
+      throw new Error(result.error.message || 'Template send failed');
+    }
 
     return {
       success: true,
@@ -173,6 +177,13 @@ async function sendSingleMessUpdateEmail(
 </html>
         `.trim(),
       });
+
+      if (fallbackResult?.error) {
+        return {
+          success: false,
+          error: fallbackResult.error.message || 'Both template and HTML fallback email failed to send',
+        };
+      }
 
       return {
         success: true,

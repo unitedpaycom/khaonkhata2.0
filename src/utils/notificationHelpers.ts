@@ -158,4 +158,18 @@ export const NOTIFICATION_TYPE_META: Record<
     bg: 'bg-purple-500/10 text-purple-700 dark:text-purple-300',
     border: 'border-purple-500/20',
   },
+  cost: {
+    label: 'খরচ',
+    icon: '🛒',
+    color: '#F59E0B',
+    bg: 'bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    border: 'border-amber-500/20',
+  },
+  member: {
+    label: 'সদস্য',
+    icon: '👤',
+    color: '#06B6D4',
+    bg: 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-300',
+    border: 'border-cyan-500/20',
+  },
 };

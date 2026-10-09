@@ -462,7 +462,19 @@ export async function sendEmailHandler(req: Request, res: Response) {
   }
 
   const targetAppUrl = payload.appUrl || process.env.APP_URL || 'https://khaonkhata.web.app';
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'KhaonKhata <onboarding@resend.dev>';
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL ||
+    process.env.RESEND_FROM_NOTICE ||
+    'KhaonKhata <notice@khaonkhata.online>';
+
+  const rawTo = String(payload.to || '').trim();
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+  if (!emailRegex.test(rawTo) || rawTo.endsWith('@example.com') || rawTo.endsWith('@test.com')) {
+    return res.status(400).json({
+      success: false,
+      error: `Invalid recipient email address: "${rawTo}"`,
+    });
+  }
 
   let emailContent: { subject: string; html: string };
   if (payload.type === 'meal_update') {
@@ -479,10 +491,18 @@ export async function sendEmailHandler(req: Request, res: Response) {
     const resend = new Resend(apiKey);
     const result = await resend.emails.send({
       from: fromEmail,
-      to: [payload.to],
+      to: [rawTo],
       subject: emailContent.subject,
       html: emailContent.html,
     });
+
+    if (result?.error) {
+      console.error('Resend email error:', result.error);
+      return res.status((result.error as any).statusCode || 400).json({
+        success: false,
+        error: result.error.message || 'Failed to send email via Resend',
+      });
+    }
 
     return res.status(200).json({
       success: true,

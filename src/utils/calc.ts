@@ -49,19 +49,19 @@ export function calcMonth(state: MessState, ym: string): MonthSummary {
     tot: 0,
   };
 
-  const allMembers = [
-    ...(state.members || []),
-    ...(state.archivedMembers || []),
-  ];
+  // Only active members are counted in total meals, dynamic rate and balance calculations
+  const activeMembers = (state.members || []).filter(m => !m.isArchived);
+  const activeMemberIds = new Set(activeMembers.map(m => m.id));
 
-  allMembers.forEach(m => {
+  activeMembers.forEach(m => {
     r.mm[m.id] = { meals: 0, dep: 0, ind: 0, cost: 0, sh: 0, tot: 0, bal: 0 };
   });
 
   days.forEach(k => {
     const day = state.meals[k] || {};
     Object.entries(day).forEach(([id, v]) => {
-      if (r.mm[id]) {
+      // Auto filter/ignore deleted user or missing ID meals
+      if (activeMemberIds.has(id) && r.mm[id]) {
         const w = mt(v);
         r.mm[id].meals += w;
         r.meals += w;
@@ -72,10 +72,10 @@ export function calcMonth(state: MessState, ym: string): MonthSummary {
   (state.deposits || [])
     .filter(x => x.date.startsWith(ym))
     .forEach(x => {
-      if (r.mm[x.m]) {
+      if (activeMemberIds.has(x.m) && r.mm[x.m]) {
         r.mm[x.m].dep += +x.amt;
+        r.dep += +x.amt;
       }
-      r.dep += +x.amt;
     });
 
   (state.bazar || [])
@@ -92,7 +92,7 @@ export function calcMonth(state: MessState, ym: string): MonthSummary {
     .forEach(x => {
       r.oth += +x.amt;
       if (x.type === 'ind') {
-        if (x.m && r.mm[x.m]) {
+        if (x.m && activeMemberIds.has(x.m) && r.mm[x.m]) {
           r.mm[x.m].ind += +x.amt;
         }
       } else {
@@ -101,7 +101,6 @@ export function calcMonth(state: MessState, ym: string): MonthSummary {
     });
 
   r.tot = r.baz + r.oth;
-  const activeMembers = (state.members || []).filter(m => !m.isArchived);
   const memberCount = activeMembers.length || 1;
   const sh = shT / memberCount;
 

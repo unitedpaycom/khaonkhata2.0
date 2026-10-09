@@ -17,7 +17,7 @@ export async function requestPasswordResetHandler(req: Request, res: Response) {
   const { email } = req.body || {};
   const cleanEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
 
-  if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
+  if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail) || cleanEmail.endsWith('@example.com') || cleanEmail.endsWith('@test.com')) {
     return res.status(400).json({
       success: false,
       error: 'অনুগ্রহ করে একটি সঠিক ইমেইল এড্রেস লিখুন (Please enter a valid email address).',
@@ -79,6 +79,10 @@ export async function requestPasswordResetHandler(req: Request, res: Response) {
           },
         },
       } as any);
+
+      if (resendResult?.error) {
+        throw new Error(resendResult.error.message || 'Template send failed');
+      }
     } catch (sendErr: any) {
       console.warn('Resend template send failed, falling back to direct email:', sendErr);
       // Fallback in case template alias is not ready
@@ -99,6 +103,10 @@ export async function requestPasswordResetHandler(req: Request, res: Response) {
           </div>
         `,
       });
+
+      if (resendResult?.error) {
+        throw new Error(resendResult.error.message || 'Direct email send failed');
+      }
     }
 
     return res.status(200).json({
