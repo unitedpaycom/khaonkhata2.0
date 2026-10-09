@@ -2953,8 +2953,6 @@ export default function App() {
                   })}
                 </div>
               </section>
-
-              <div className="kk-spc" />
             </main>
           </div>
         )}
@@ -4919,7 +4917,6 @@ export default function App() {
             showToast={showToast}
           />
         )}
-        <div className="kk-spc" />
       </main>
 
       {/* Floating Navigation Bar */}
