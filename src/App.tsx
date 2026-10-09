@@ -3530,6 +3530,7 @@ export default function App() {
                 })()}
               </div>
             )}
+            <div className="kk-spc" />
           </div>
         )}
 
@@ -3631,6 +3632,7 @@ export default function App() {
                 )}
               </div>
             </div>
+            <div className="kk-spc" />
           </div>
         )}
 
@@ -3817,6 +3819,7 @@ export default function App() {
                   )}
               </div>
             </div>
+            <div className="kk-spc" />
           </div>
         )}
 
@@ -4916,6 +4919,7 @@ export default function App() {
             showToast={showToast}
           />
         )}
+        <div className="kk-spc" />
       </main>
 
       {/* Floating Navigation Bar */}
