@@ -3617,26 +3617,11 @@ export default function App() {
         )}
       </main>
 
-      {/* Floating Navigation Bar */}
+      {/* Floating Navigation Bar (Mobile) */}
       <nav className="nav" aria-label="Main">
+        {/* 1. Meal (Swapped to position 1 where Home was) */}
         <button
-          className={tab === 'home' ? 'on' : ''}
-          onClick={() => { setTab('home'); setDrawerOpen(false); }}
-        >
-          <svg className="i"><use href="#home" /></svg>
-          Home
-        </button>
-
-        <button
-          className={tab === 'deposit' || tab === 'member_deposit' ? 'on' : ''}
-          onClick={() => { setTab(isManager ? 'deposit' : 'member_deposit'); setDrawerOpen(false); }}
-        >
-          <svg className="i"><use href="#wal" /></svg>
-          Deposit
-        </button>
-
-        <button
-          className={tab === 'meal' ? 'on' : ''}
+          className={`relative ${tab === 'meal' ? 'on' : ''}`}
           onClick={() => { setTab('meal'); setDrawerOpen(false); }}
         >
           <svg className="i"><use href="#bowl" /></svg>
@@ -3646,6 +3631,28 @@ export default function App() {
           )}
         </button>
 
+        {/* 2. Deposit */}
+        <button
+          className={tab === 'deposit' || tab === 'member_deposit' ? 'on' : ''}
+          onClick={() => { setTab(isManager ? 'deposit' : 'member_deposit'); setDrawerOpen(false); }}
+        >
+          <svg className="i"><use href="#wal" /></svg>
+          Deposit
+        </button>
+
+        {/* 3. Home (Swapped to middle position 3 with distinctive elevated center highlight) */}
+        <button
+          className={`nav-home-center ${tab === 'home' ? 'on' : ''}`}
+          onClick={() => { setTab('home'); setDrawerOpen(false); }}
+          aria-label="Home Dashboard"
+        >
+          <div className="nav-home-icon-wrap">
+            <svg className="i"><use href="#home" /></svg>
+          </div>
+          <span>Home</span>
+        </button>
+
+        {/* 4. Cost */}
         <button
           className={tab === 'cost' ? 'on' : ''}
           onClick={() => { setTab('cost'); setDrawerOpen(false); }}
@@ -3654,6 +3661,7 @@ export default function App() {
           Cost
         </button>
 
+        {/* 5. Members */}
         <button
           className={tab === 'members' || tab === 'detail' ? 'on' : ''}
           onClick={() => { setTab('members'); setDrawerOpen(false); }}
