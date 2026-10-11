@@ -50,6 +50,36 @@ async function startServer() {
     return res.status(404).json({ error: 'assetlinks.json not found' });
   });
 
+  // Sitemap endpoint
+  app.get('/sitemap.xml', (_req, res) => {
+    const sitemapPath = path.resolve(__dirname, 'public/sitemap.xml');
+    if (fs.existsSync(sitemapPath)) {
+      res.setHeader('Content-Type', 'application/xml');
+      return res.sendFile(sitemapPath);
+    }
+    const distSitemapPath = path.resolve(__dirname, 'dist/sitemap.xml');
+    if (fs.existsSync(distSitemapPath)) {
+      res.setHeader('Content-Type', 'application/xml');
+      return res.sendFile(distSitemapPath);
+    }
+    return res.status(404).send('Sitemap not found');
+  });
+
+  // Robots endpoint
+  app.get('/robots.txt', (_req, res) => {
+    const robotsPath = path.resolve(__dirname, 'public/robots.txt');
+    if (fs.existsSync(robotsPath)) {
+      res.setHeader('Content-Type', 'text/plain');
+      return res.sendFile(robotsPath);
+    }
+    const distRobotsPath = path.resolve(__dirname, 'dist/robots.txt');
+    if (fs.existsSync(distRobotsPath)) {
+      res.setHeader('Content-Type', 'text/plain');
+      return res.sendFile(distRobotsPath);
+    }
+    return res.status(404).send('Robots.txt not found');
+  });
+
   // Healthcheck endpoint
   app.get('/api/health', (_req, res) => {
     res.json({
