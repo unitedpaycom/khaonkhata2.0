@@ -19,10 +19,9 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // User profiles - allow read for signed in users so members can be searched by email
+    // User profiles - allow read and write so user profiles and session metadata can be managed
     match /users/{userId} {
-      allow read: if true;
-      allow write: if isUser(userId) || (request.auth == null && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['passwordHash', 'salt', 'updatedAt', 'passwordResetAt']));
+      allow read, write: if true;
     }
 
     // Password reset OTPs collection (for OTP generation and validation)

@@ -23,10 +23,12 @@ interface ModalProps {
   deleteText?: string;
 }
 
+const EMPTY_FIELDS: ModalField[] = [];
+
 export const Modal: React.FC<ModalProps> = ({
   isOpen,
   title,
-  fields = [],
+  fields = EMPTY_FIELDS,
   message,
   onConfirm,
   onCancel,
@@ -37,15 +39,20 @@ export const Modal: React.FC<ModalProps> = ({
 }) => {
   const [formData, setFormData] = React.useState<Record<string, string>>({});
 
+  // Compute a stable signature of field keys and initial values to avoid re-triggering on fresh array references
+  const fieldsKey = React.useMemo(() => {
+    return (fields || []).map(f => `${f.k}:${f.v ?? ''}`).join(';');
+  }, [fields]);
+
   React.useEffect(() => {
     if (isOpen) {
       const initial: Record<string, string> = {};
-      fields.forEach(f => {
+      (fields || []).forEach(f => {
         initial[f.k] = f.v !== undefined ? String(f.v) : '';
       });
       setFormData(initial);
     }
-  }, [isOpen, fields]);
+  }, [isOpen, fieldsKey]);
 
   if (!isOpen) return null;
 

@@ -2727,8 +2727,11 @@ main,
   box-sizing: border-box;
 }
 
-/* Prevent double-padding or artificial width constraints when in home dashboard */
+/* Prevent double-padding or artificial width constraints when in home dashboard or member profile view */
 main.home-active,
+main.detail-active,
+main:has(.kk-view),
+main:has(.kk-pf2),
 main:has(.shell) {
   padding: 0 0 calc(76px + env(safe-area-inset-bottom, 0px)) 0 !important;
   max-width: 100% !important;
@@ -4651,6 +4654,215 @@ summary::marker, details summary::marker, .kk summary::marker {
 }
 .kk .kk-dx { z-index: 5; }
 
+/* Profile View Styles - 100% exact from template */
+.kk .kk-pv{position:sticky;top:0;z-index:30;display:flex;justify-content:center;padding:10px 12px;background:rgba(228,235,231,.85);backdrop-filter:blur(10px)}
+[data-theme="dark"] .kk .kk-pv, .dark .kk .kk-pv{background:rgba(15,26,21,.85)}
+.kk .kk-pv .kk-tabs{margin:0;padding:3px;background:#fff;border:1px solid var(--kk-line);border-radius:99px;gap:2px;overflow:visible}
+[data-theme="dark"] .kk .kk-pv .kk-tabs, .dark .kk .kk-pv .kk-tabs{background:#182821}
+.kk .kk-pv .kk-tabs button{border:0;padding:8px 18px}
+.kk .kk-pf2{padding-bottom:70px}
+.kk .kk-bar{display:flex;align-items:center;gap:12px}
+.kk .kk-bar h1{flex:1;text-align:center;font:600 17px 'Hind Siliguri','Manrope';margin:0}
+.kk .kk-ava{position:relative;width:112px;height:112px;margin:22px auto 0;display:grid;place-items:center}
+.kk .kk-ava:before{content:"";position:absolute;inset:0;border-radius:50%;background:conic-gradient(from 0deg,#F2DCA2,#C99F4E,rgba(216,180,107,.08),#F2DCA2);animation:kk-spin 8s linear infinite;-webkit-mask:radial-gradient(circle,transparent 52px,#000 53px);mask:radial-gradient(circle,transparent 52px,#000 53px)}
+.kk .kk-ava>span{width:98px;height:98px;border-radius:50%;display:grid;place-items:center;font:500 46px 'Newsreader',serif;color:#fff;background:radial-gradient(circle at 30% 25%,#34C08B,#0B6B4B 70%);box-shadow:inset 0 0 0 3px #08271E}
+.kk .kk-ava em{position:absolute;right:2px;bottom:4px;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-style:normal;color:#2A1D00;background:linear-gradient(135deg,#F2DCA2,#C99F4E);border:3px solid #0A3023;box-shadow:0 8px 16px -6px #000}
+.kk .kk-ava.kk-mbr:before{background:conic-gradient(from 0deg,#9BE0C2,#1FA874,rgba(31,168,116,.08),#9BE0C2)}
+.kk .kk-ava.kk-mbr em{background:linear-gradient(135deg,#7ADDB5,#1FA874);color:#04281B}
+.kk .kk-nm{text-align:center;margin-top:14px}
+.kk .kk-nm b{display:block;font:600 24px/1.25 'Manrope','Hind Siliguri',sans-serif;letter-spacing:-.01em}
+.kk .kk-nm span{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#F0D79B;background:rgba(216,180,107,.16);border:1px solid rgba(216,180,107,.4);border-radius:99px;padding:4px 13px}
+.kk .kk-mbr+.kk-nm span{color:#A8EBCC;background:rgba(31,168,116,.18);border-color:rgba(122,221,181,.4)}
+.kk .kk-ct{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+.kk .kk-ct span{display:inline-flex;gap:7px;align-items:center;font-size:12.5px;padding:7px 12px;border-radius:99px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);max-width:100%}
+.kk .kk-ct svg{opacity:.7;flex:none}
+.kk .kk-pa2{display:flex;gap:9px;justify-content:center;margin-top:18px}
+.kk .kk-pa2 button{display:inline-flex;align-items:center;gap:7px;padding:11px 17px;border-radius:99px;font-size:13.5px;font-weight:700;color:#fff;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);transition:transform .15s}
+.kk .kk-pa2 button:active{transform:scale(.94)}
+.kk .kk-pa2 .kk-g1{background:linear-gradient(135deg,#E6C98A,#C99F4E);color:#2A1D00;border-color:transparent;box-shadow:0 12px 20px -10px #C99F4E}
+.kk .kk-pa2 .kk-r1{background:rgba(219,90,82,.2);border-color:rgba(255,150,140,.4);color:#FFD7D3}
+.kk .kk-bc{margin-top:-6px;padding:20px 18px 18px;background:radial-gradient(240px 140px at 100% 0,rgba(216,180,107,.2),transparent 70%),#fff}
+[data-theme="dark"] .kk .kk-bc, .dark .kk .kk-bc{background:radial-gradient(240px 140px at 100% 0,rgba(216,180,107,.15),transparent 70%),#182821}
+.kk .kk-bc .kk-lab{color:var(--kk-mut);opacity:1;font-size:12.5px;font-weight:700;letter-spacing:.06em}
+.kk .kk-bc .kk-bign{font:500 46px/1.1 'Newsreader',serif;letter-spacing:-.02em;margin-top:2px}
+.kk .kk-bign small{font:500 24px 'Newsreader';color:var(--kk-gold2);margin-right:4px;vertical-align:top;position:relative;top:6px}
+.kk .kk-bc .kk-st{position:absolute;right:16px;top:18px;font-size:12px;font-weight:800;border-radius:99px;padding:4px 11px}
+.kk .kk-bc{position:relative}
+.kk .kk-stp{background:#DFF2E8;color:#0F7A55}
+[data-theme="dark"] .kk .kk-stp, .dark .kk .kk-stp{background:#164230;color:#55D69F}
+.kk .kk-stn{background:#FADFDC;color:#B5453D}
+[data-theme="dark"] .kk .kk-stn, .dark .kk .kk-stn{background:#421C1C;color:#FFA39B}
+.kk .kk-t3{display:grid;grid-template-columns:repeat(3,1fr);margin-top:16px;padding-top:14px;border-top:1px solid var(--kk-line)}
+.kk .kk-t3 div{padding:0 10px}
+.kk .kk-t3 div:first-child{padding-left:0}
+.kk .kk-t3 div+div{border-left:1px solid var(--kk-line)}
+.kk .kk-t3 small{display:block;font-size:12px;color:var(--kk-mut)}
+.kk .kk-t3 b{font:700 16.5px 'Manrope'}
+.kk .kk-sg4{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kk .kk-sg4 .kk-card{padding:16px}
+.kk .kk-sg4 i{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;margin-bottom:10px}
+.kk .kk-sg4 small{display:block;font-size:12.5px;color:var(--kk-mut)}
+.kk .kk-sg4 b{font:500 28px/1.2 'Newsreader',serif}
+.kk .kk-sg4 b u{font:700 13px 'Manrope';text-decoration:none;color:var(--kk-mut);margin-left:3px}
+.kk .kk-idc{position:relative;overflow:hidden;border-radius:24px;padding:20px 20px 18px;color:#F2F7F4;min-height:178px;background:radial-gradient(300px 200px at 100% 0,rgba(216,180,107,.3),transparent 70%),linear-gradient(135deg,#0E4A36,#08271E);border:1px solid rgba(216,180,107,.45);box-shadow:0 26px 40px -24px rgba(8,39,30,.85)}
+.kk .kk-idc.kk-mc2{background:radial-gradient(300px 200px at 100% 0,rgba(122,221,181,.28),transparent 70%),linear-gradient(135deg,#126B4D,#0A3426);border-color:rgba(122,221,181,.4)}
+.kk .kk-idc .kk-orn{right:-60px;top:-60px;width:220px;height:220px;opacity:.28}
+.kk .kk-idc>*{position:relative}
+.kk .kk-idc>.kk-orn{position:absolute}
+.kk .kk-idt{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:800;letter-spacing:.16em;color:var(--kk-gold)}
+.kk .kk-chip{width:42px;height:32px;border-radius:8px;margin-top:18px;background:linear-gradient(135deg,#F2DCA2,#B98A3A);position:relative;overflow:hidden}
+.kk .kk-chip:before,.kk .kk-chip:after{content:"";position:absolute;background:rgba(80,50,0,.35)}
+.kk .kk-chip:before{left:0;right:0;top:50%;height:1px}
+.kk .kk-chip:after{top:0;bottom:0;left:38%;width:1px;box-shadow:12px 0 0 rgba(80,50,0,.35)}
+.kk .kk-idn{font:500 21px 'Manrope';letter-spacing:.22em;margin-top:14px;color:#fff}
+.kk .kk-idb{display:flex;justify-content:space-between;align-items:flex-end;margin-top:14px;gap:10px}
+.kk .kk-idb small{display:block;font-size:10.5px;letter-spacing:.1em;opacity:.6;text-transform:uppercase}
+.kk .kk-idb b{font-size:14px;font-weight:700}
+.kk .kk-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.kk .kk-cal u{text-decoration:none;text-align:center;font-size:11px;font-weight:800;color:var(--kk-mut)}
+.kk .kk-cal i{aspect-ratio:1;border-radius:10px;display:grid;place-items:center;font:600 12px 'Manrope';font-style:normal;background:#EEF3F0;color:#8A9A92;position:relative}
+[data-theme="dark"] .kk .kk-cal i, .dark .kk .kk-cal i{background:#233930;color:#9AB5A8}
+.kk .kk-cal i.k1{background:#CFEBDD;color:#0B3B2C}
+[data-theme="dark"] .kk .kk-cal i.k1, .dark .kk .kk-cal i.k1{background:#164B34;color:#B8F0D6}
+.kk .kk-cal i.k2{background:#6FCBA3;color:#05301F}
+[data-theme="dark"] .kk .kk-cal i.k2, .dark .kk .kk-cal i.k2{background:#1FA874;color:#062E1F}
+.kk .kk-cal i.k3{background:linear-gradient(135deg,#12855D,#0B3B2C);color:#fff}
+.kk .kk-cal i.kf{background:transparent;border:1px dashed #D5DFD9}
+[data-theme="dark"] .kk .kk-cal i.kf, .dark .kk .kk-cal i.kf{border-color:#345547}
+.kk .kk-cal i.kt{box-shadow:0 0 0 2px #fff,0 0 0 3.5px var(--kk-gold)}
+[data-theme="dark"] .kk .kk-cal i.kt, .dark .kk .kk-cal i.kt{box-shadow:0 0 0 2px #182821,0 0 0 3.5px var(--kk-gold)}
+.kk .kk-cal i.ke{visibility:hidden}
+.kk .kk-key{display:flex;align-items:center;gap:8px;justify-content:flex-end;font-size:11.5px;color:var(--kk-mut);margin-top:12px}
+.kk .kk-key s{width:14px;height:14px;border-radius:5px;text-decoration:none;display:inline-block}
+.kk .kk-dl .kk-r span{display:flex;gap:9px;align-items:center}
+.kk .kk-dl .kk-r span svg{color:var(--kk-gold2)}
+.kk .kk-dl .kk-r b{max-width:60%;overflow:hidden;text-overflow:ellipsis}
+.kk .kk-pm{display:grid;gap:0}
+.kk .kk-pm div{display:flex;gap:12px;align-items:center;padding:11px 0;border-bottom:1px dashed #DCE6DF;font-size:14px}
+[data-theme="dark"] .kk .kk-pm div, .dark .kk .kk-pm div{border-bottom-color:#264638}
+.kk .kk-pm div:last-child{border:0}
+.kk .kk-pm i{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none;background:#DFF2E8;color:var(--kk-g)}
+[data-theme="dark"] .kk .kk-pm i, .dark .kk .kk-pm i{background:#164230;color:#55D69F}
+.kk .kk-pm .kk-no{background:#EEF3F0;color:#9AA9A1}
+[data-theme="dark"] .kk .kk-pm .kk-no, .dark .kk .kk-pm .kk-no{background:#233930;color:#6C857A}
+.kk .kk-pm .kk-no+span{color:#9AA9A1}
+.kk .kk-ro{display:flex;gap:12px;padding:14px;border-radius:16px;background:#F5F8F6;border:1px dashed #CBD8D0;font-size:13.5px;color:#4A5C53;margin-top:4px}
+[data-theme="dark"] .kk .kk-ro, .dark .kk .kk-ro{background:#1B352A;border-color:#2D5241;color:#A9C5B7}
+.kk .kk-ro svg{color:var(--kk-gold2);flex:none;margin-top:2px}
+.kk .kk-tl{position:relative;padding-left:26px}
+.kk .kk-tl:before{content:"";position:absolute;left:8px;top:6px;bottom:6px;width:2px;background:linear-gradient(var(--kk-gold),#E3EAE5)}
+.kk .kk-tl div{position:relative;padding:0 0 18px}
+.kk .kk-tl div:last-child{padding:0}
+.kk .kk-tl div:before{content:"";position:absolute;left:-23px;top:4px;width:12px;height:12px;border-radius:50%;background:#fff;border:3px solid var(--kk-gold)}
+[data-theme="dark"] .kk .kk-tl div:before, .dark .kk .kk-tl div:before{background:#182821}
+.kk .kk-tl b{display:block;font-size:14px}
+.kk .kk-tl small{font-size:12.5px;color:var(--kk-mut)}
+.kk .kk-pane[hidden]{display:none!important}
 
+/* ============================================================
+   MEMBER PROFILE VIEW: 100% FULL-WIDTH & CLEAN MOBILE FIT
+   ============================================================ */
+.kk-view,
+.kk.kk-view {
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
 
+@media (min-width: 769px) {
+  .kk-view,
+  .kk.kk-view {
+    max-width: 860px !important;
+  }
+}
 
+.kk-hero.kk-pf2 {
+  width: 100% !important;
+  box-sizing: border-box;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+@media (max-width: 480px) {
+  .kk-hero.kk-pf2 {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+.kk-sheet,
+.kk .kk-sheet {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  padding-left: 14px !important;
+  padding-right: 14px !important;
+}
+
+@media (max-width: 480px) {
+  .kk-sheet,
+  .kk .kk-sheet {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+}
+
+/* Ensure all cards take 100% full width inside member profile and members list */
+.kk-card,
+.kk .kk-card,
+.kk-sec,
+.kk .kk-sec,
+.kk-bc,
+.kk .kk-bc,
+.kk-idc,
+.kk .kk-idc,
+.kk-mc,
+.kk .kk-mc,
+.kk-sg4,
+.kk .kk-sg4 {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+}
+
+.kk-sg4,
+.kk .kk-sg4 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.kk-sg4 .kk-card,
+.kk .kk-sg4 .kk-card {
+  padding: 14px 12px;
+  width: 100% !important;
+  margin-bottom: 0 !important;
+}
+
+.kk-tabs,
+.kk .kk-tabs {
+  width: 100%;
+  box-sizing: border-box;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 2px !important;
+  padding-right: 2px !important;
+}
+
+@media (max-width: 480px) {
+  .kk-card,
+  .kk .kk-card {
+    padding: 16px 14px;
+    border-radius: 18px;
+  }
+  .kk .kk-bc {
+    padding: 18px 14px 16px;
+  }
+  .kk .kk-idc {
+    padding: 18px 16px 16px;
+    border-radius: 20px;
+  }
+}

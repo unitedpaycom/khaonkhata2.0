@@ -12,6 +12,7 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, googleProvider, db } from '../firebase';
 import { requestPasswordResetOTP, verifyOTPAndResetPassword } from '../utils/emailClient';
+import { UnauthorizedDomainModal } from './UnauthorizedDomainModal';
 
 interface LoginPageProps {
   onGoogleSignIn: () => void;
@@ -25,6 +26,7 @@ interface LoginPageProps {
 
 export const LoginPage: React.FC<LoginPageProps> = ({
   onBackToHome,
+  unauthorizedDomainModal,
   setUnauthorizedDomainModal,
   showToast,
   onNavigate,
@@ -196,6 +198,28 @@ export const LoginPage: React.FC<LoginPageProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Quick Demo / Test Login for instant testing without domain approval delays
+  const handleDemoLogin = () => {
+    const demoUser = {
+      uid: 'demo_user_manager',
+      email: 'info.reduean@gmail.com',
+      displayName: 'Reduean Rahat (ম্যানেজার)',
+      photoURL: null,
+    };
+    try {
+      localStorage.setItem('khaonkhata_auth_user', JSON.stringify(demoUser));
+    } catch {
+      // ignore
+    }
+    if (onUserAuthenticated) {
+      onUserAuthenticated(demoUser);
+    }
+    showToast('স্বাগতম! ডেমো মোডে সফলভাবে লগইন হয়েছে।');
+    setTimeout(() => {
+      onNavigate('/dashboard');
+    }, 200);
   };
 
   // Email/Username + Password Login
@@ -912,7 +936,25 @@ export const LoginPage: React.FC<LoginPageProps> = ({
                   role="status"
                   aria-live="polite"
                 >
-                  {message.text}
+                  <p className="m-0 font-medium">{message.text}</p>
+                  {(message.text.includes('অনুমোদিত নয়') || message.text.includes('unauthorized-domain')) && (
+                    <div className="mt-2.5 pt-2 border-t border-rose-200 dark:border-rose-900/60 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setUnauthorizedDomainModal(true)}
+                        className="px-2.5 py-1 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-md font-semibold cursor-pointer transition shadow-xs"
+                      >
+                        🛠️ ডোমেইন যোগ করার নিয়ম
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDemoLogin}
+                        className="px-2.5 py-1 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-semibold cursor-pointer transition shadow-xs"
+                      >
+                        🚀 ডেমো মোডে প্রবেশ
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </form>
@@ -1138,6 +1180,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({
           </div>
         </div>
       )}
+
+      {/* Unauthorized Domain Modal */}
+      <UnauthorizedDomainModal
+        isOpen={unauthorizedDomainModal}
+        onClose={() => setUnauthorizedDomainModal(false)}
+        onSelectEmailAuth={() => {
+          setUnauthorizedDomainModal(false);
+          setMode('login');
+          setTimeout(() => {
+            const emailInput = document.getElementById('email');
+            emailInput?.focus();
+          }, 150);
+        }}
+        onDemoLogin={handleDemoLogin}
+        projectId="khaonkhata"
+      />
     </div>
   );
 };

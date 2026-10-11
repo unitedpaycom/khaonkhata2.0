@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 
 interface LogoLoaderProps {
   text?: string;
@@ -18,6 +18,11 @@ export const LogoLoader: React.FC<LogoLoaderProps> = ({
   const [progress, setProgress] = useState(0);
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [startTime] = useState(() => Date.now());
+  const onFinishRef = useRef(onFinish);
+
+  useEffect(() => {
+    onFinishRef.current = onFinish;
+  });
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -42,21 +47,21 @@ export const LogoLoader: React.FC<LogoLoaderProps> = ({
   // When isReady becomes true or progress hits 100, wait minDisplayTime then fade out
   useEffect(() => {
     if (isReady || progress >= 100) {
-      setProgress(100);
+      setProgress((prev) => (prev < 100 ? 100 : prev));
       const elapsed = Date.now() - startTime;
       const remainingWait = Math.max(0, minDisplayTime - elapsed);
 
       const t1 = setTimeout(() => {
         setIsFadingOut(true);
         const t2 = setTimeout(() => {
-          if (onFinish) onFinish();
+          if (onFinishRef.current) onFinishRef.current();
         }, 600); // 600ms matching CSS transition
         return () => clearTimeout(t2);
       }, remainingWait);
 
       return () => clearTimeout(t1);
     }
-  }, [isReady, progress, minDisplayTime, startTime, onFinish]);
+  }, [isReady, progress >= 100, minDisplayTime, startTime]);
 
   return (
     <div

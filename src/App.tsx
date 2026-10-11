@@ -90,6 +90,9 @@ import { PrivacyPolicyPage } from './components/PrivacyPolicyPage';
 import { TermsPage } from './components/TermsPage';
 import { ContactPage } from './components/ContactPage';
 import { LogoLoader } from './components/LogoLoader';
+import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
+import { MemberProfileView } from './components/MemberProfileView';
+import { MembersListView } from './components/MembersListView';
 
 export interface AppUser {
   uid: string;
@@ -207,6 +210,13 @@ export default function App() {
     window.addEventListener('popstate', handlePop);
     return () => window.removeEventListener('popstate', handlePop);
   }, []);
+
+  // Redirect logged-in user to dashboard if on root or login page
+  useEffect(() => {
+    if (user && (pathname === '/' || pathname === '' || pathname === '/login')) {
+      navigate('/dashboard');
+    }
+  }, [user?.uid, pathname]);
 
   // Offline Persistence & Auto-Sync State
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
@@ -336,7 +346,7 @@ export default function App() {
     } catch {
       setReadNotificationIds(new Set());
     }
-  }, [currentMessId, user]);
+  }, [currentMessId, user?.uid]);
 
   // Real-time Firestore listener for mess_notifications collection
   useEffect(() => {
@@ -562,7 +572,7 @@ export default function App() {
     setupFcmForegroundListener((payload) => {
       showToast(`🔔 ${payload.title}: ${payload.body}`);
     });
-  }, [user]);
+  }, [user?.uid]);
 
   // Listen to real-time User's Mess list
   useEffect(() => {
@@ -658,7 +668,7 @@ export default function App() {
     };
 
     fetchUserMesses();
-  }, [user, profile]);
+  }, [user?.uid, user?.email, profile?.currentMessId, (profile?.joinedMesses || []).join(',')]);
 
   // Refresh pending offline sync count
   const refreshPendingSyncCount = async () => {
@@ -756,7 +766,7 @@ export default function App() {
     );
 
     return () => unsub();
-  }, [currentMessId, user]);
+  }, [currentMessId, user?.uid]);
 
   // Update theme on html element
   useEffect(() => {
@@ -2052,7 +2062,6 @@ export default function App() {
   // --- STRICT AUTO-REDIRECT FOR LOGGED-IN USERS AT ROOT OR LOGIN ---
   // If an authenticated user opens or refreshes root (/) or /login, redirect straight to Dashboard
   if (user && (pathname === '/' || pathname === '' || pathname === '/login')) {
-    setTimeout(() => navigate('/dashboard'), 0);
     return (
       <LogoLoader
         text="ড্যাশবোর্ড লোড হচ্ছে..."
@@ -2536,9 +2545,9 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main id="app" className={tab === 'home' ? 'home-active' : ''}>
+      <main id="app" className={tab === 'home' || tab === 'detail' || tab === 'members' ? 'home-active' : ''}>
         {/* Top Header Bar for Sub-Pages: Clean layout with Menu button (☰) and Page Title only */}
-        {tab !== 'home' && (
+        {tab !== 'home' && tab !== 'detail' && tab !== 'profile' && tab !== 'members' && (
           <div className="top flex items-center gap-3 mb-4">
             <button
               type="button"
@@ -2554,12 +2563,9 @@ export default function App() {
               {tab === 'deposit' && 'Add Deposit'}
               {tab === 'meal' && 'Add Meal'}
               {tab === 'cost' && 'Add Cost'}
-              {tab === 'members' && 'Mess Members'}
-              {tab === 'detail' && 'Member Details'}
               {tab === 'active' && 'Active Month Details'}
               {tab === 'all' && 'All Month Details'}
               {tab === 'settings' && 'Mess Settings'}
-              {tab === 'profile' && 'Profile'}
               {tab === 'payment_methods' && 'Payment Methods'}
               {tab === 'member_deposit' && 'Deposit'}
             </h1>
@@ -3823,144 +3829,27 @@ export default function App() {
 
         {/* --- VIEW: MEMBERS --- */}
         {tab === 'members' && (
-          <div className="pg space-y-4">
-            <div className="card">
-              <h3>
-                <span>Mess Members ({messState.members.length})</span>
-                {isManager && (
-                  <button
-                    className="btn s"
-                    onClick={() => setIsAddMemberOpen(true)}
-                  >
-                    + সদস্য যোগ
-                  </button>
-                )}
-              </h3>
-              <input
-                placeholder="নাম / ইমেইল / রুম খুঁজুন..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="mt-2"
-              />
-            </div>
-
-            <div className="space-y-3">
-              {messState.members
-                .filter(m =>
-                  `${m.name} ${m.email || ''} ${m.room || ''}`
-                    .toLowerCase()
-                    .includes(searchQuery.toLowerCase())
-                )
-                .map(m => {
-                  const mSummary = monthSummary?.mm[m.id] || {
-                    meals: 0,
-                    dep: 0,
-                    cost: 0,
-                    ind: 0,
-                    sh: 0,
-                    tot: 0,
-                    bal: 0,
-                  };
-                  return (
-                    <div
-                      key={m.id}
-                      className="card mb cursor-pointer hover:border-[var(--pri)]"
-                      onClick={() => {
-                        setDetailMemberId(m.id);
-                        setTab('detail');
-                      }}
-                    >
-                      <div className="row !p-0">
-                        <span className="av overflow-hidden">
-                          {m.photoURL ? (
-                            <img src={m.photoURL} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            (m.name[0] || '?').toUpperCase()
-                          )}
-                        </span>
-                        <div className="g1">
-                          <b>{m.name}</b>
-                          {m.id === messState.mgr && (
-                            <span className="tag ml-2">Manager</span>
-                          )}
-                          <br />
-                          <small>{m.room || 'Room -'} · {m.email || 'Email নেই'}</small>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <div className="text-right">
-                            <b className={mSummary.bal >= 0 ? 'ok' : 'bad'}>
-                              {tk(mSummary.bal)}
-                            </b>
-                            <br />
-                            <small className="text-[var(--mut)]">বিস্তারিত ›</small>
-                          </div>
-                          {isManager && m.id !== messState.mgr && (
-                            <button
-                              type="button"
-                              className="btn d s !py-1 !px-2.5 text-xs font-bold cursor-pointer ml-1"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setModalConfig({
-                                  isOpen: true,
-                                  title: 'সদস্য মুছে ফেলবেন?',
-                                  message: `আপনি কি "${m.name}"-কে মেস থেকে রিমুভ ও আর্কাইভ করতে চান? ওনার পূর্বের মিল ও জমার রেকর্ড মেসের ইতিহাসে সংরক্ষিত থাকবে, কিন্তু উনি আর অ্যাক্টিভ লিস্টে থাকবেন না এবং লগইন করতে পারবেন না।`,
-                                  confirmText: 'মুছে ফেলুন',
-                                  onConfirm: () => handleArchiveMember(m),
-                                });
-                              }}
-                              title="সদস্য মুছুন / আর্কাইভ করুন"
-                            >
-                              🗑️
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
-
-            {/* Archived Members List */}
-            {messState.archivedMembers && messState.archivedMembers.length > 0 && (
-              <div className="card !bg-neutral-50 dark:!bg-neutral-900/40 border border-dashed border-[var(--line)]">
-                <h4 className="text-xs font-bold text-[var(--mut)] uppercase tracking-wider mb-2 flex items-center justify-between">
-                  <span>📦 আর্কাইভকৃত প্রাক্তন সদস্য ({messState.archivedMembers.length})</span>
-                  <span className="text-[10px] font-normal lowercase">রেকর্ড সংরক্ষিত</span>
-                </h4>
-                <div className="divide-y divide-[var(--line)]">
-                  {messState.archivedMembers.map(am => {
-                    const amSummary = monthSummary?.mm[am.id] || { bal: 0, meals: 0, dep: 0 };
-                    return (
-                      <div key={am.id} className="py-2 flex items-center justify-between text-xs opacity-75">
-                        <div className="flex items-center gap-2">
-                          <span className="av !w-7 !h-7 !text-xs bg-neutral-200 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300">
-                            {(am.name[0] || '?').toUpperCase()}
-                          </span>
-                          <div>
-                            <span className="font-semibold text-[var(--ink)]">{am.name}</span>
-                            <span className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded ml-1.5 font-bold">
-                              আর্কাইভড
-                            </span>
-                            <p className="text-[10px] text-[var(--mut)] m-0">{am.email || 'Email নেই'}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <span className={amSummary.bal >= 0 ? 'text-emerald-600 font-bold' : 'text-red-500 font-bold'}>
-                            {tk(amSummary.bal)}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
+          <MembersListView
+            messState={messState}
+            activeYM={activeYM}
+            setActiveYM={setActiveYM}
+            monthSummary={monthSummary}
+            isManager={isManager}
+            onSelectMember={(memberId) => {
+              setDetailMemberId(memberId);
+              setTab('detail');
+            }}
+            onAddMember={() => setIsAddMemberOpen(true)}
+            onArchiveMember={handleArchiveMember}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onBack={() => setTab('home')}
+            setModalConfig={setModalConfig}
+          />
         )}
 
         {/* --- VIEW: MEMBER DETAIL --- */}
         {tab === 'detail' && detailMemberId && (
-          <div className="pg space-y-4">
+          <div className="w-full">
             {(() => {
               const mem = messState.members.find(m => m.id === detailMemberId) ||
                 (messState.archivedMembers || []).find(m => m.id === detailMemberId);
@@ -3989,233 +3878,73 @@ export default function App() {
               );
 
               return (
-                <>
-                  <div className="card">
-                    <div className="row !p-0">
-                      <span className="av !w-12 !h-12 !text-xl overflow-hidden">
-                        {mem.photoURL ? (
-                          <img src={mem.photoURL} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          (mem.name[0] || '?').toUpperCase()
-                        )}
-                      </span>
-                      <div className="g1">
-                        <b className="text-xl">{mem.name}</b>
-                        {mem.id === messState.mgr && (
-                          <span className="tag ml-2">Manager</span>
-                        )}
-                        {mem.isArchived && (
-                          <span className="tag ml-2 !bg-amber-100 dark:!bg-amber-950 text-amber-800 dark:text-amber-200">
-                            আর্কাইভড
-                          </span>
-                        )}
-                        <br />
-                        <small>
-                          {mem.email || 'Email নেই'} · {mem.room || 'রুম নেই'} · জয়েনিং: {mem.join || '-'}
-                        </small>
-                      </div>
-                    </div>
-
-                    {/* MANAGER PRIVATE CREDENTIALS DISPLAY */}
-                    {isManager && mem.tempPassword && (
-                      <div className="mt-3 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-                        <div className="space-y-0.5">
-                          <span className="text-[11px] font-bold text-emerald-800 dark:text-emerald-200 uppercase tracking-wider flex items-center gap-1">
-                            <span>🔑</span>
-                            <span>লগইন ক্রেডেনশিয়াল (ম্যানেজার ভিউ)</span>
-                          </span>
-                          <p className="text-xs text-emerald-950 dark:text-emerald-100 m-0">
-                            লগইন পাসওয়ার্ড: <code className="font-mono font-bold bg-white dark:bg-black/30 px-2 py-0.5 rounded text-emerald-700 dark:text-emerald-300">{mem.tempPassword}</code>
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn s font-bold text-xs py-1 px-3 cursor-pointer"
-                          onClick={() => {
-                            navigator.clipboard.writeText(`মেস লগইন:\nআইডি: ${mem.email || mem.name}\nপাসওয়ার্ড: ${mem.tempPassword}\nলিঙ্ক: https://khaonkhata.online/login`);
-                            showToast('ক্রেডেনশিয়াল কপি হয়েছে!');
-                          }}
-                        >
-                          📋 কপি করুন
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="acts !justify-between items-center mt-4 pt-3 border-t border-[var(--line)] flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="btn !bg-emerald-600 !text-white hover:!bg-emerald-700 s flex items-center gap-1.5 cursor-pointer font-semibold shadow-xs"
-                        disabled={isExportingPDF}
-                        onClick={() => handleDownloadIndividualPDF(mem)}
-                        title="Download Individual Monthly Expense & Meal Summary PDF"
-                      >
-                        <span>📄</span>
-                        <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'মাসিক হিসাব PDF ডাউনলোড'}</span>
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        {isManager && !mem.isArchived && mem.id !== messState.mgr && (
-                          <button
-                            type="button"
-                            className="btn d s font-bold flex items-center gap-1 cursor-pointer"
-                            onClick={() => {
-                              setModalConfig({
-                                isOpen: true,
-                                title: 'সদস্য মুছে ফেলবেন?',
-                                message: `আপনি কি "${mem.name}"-কে মেস থেকে রিমুভ ও আর্কাইভ করতে চান? ওনার পূর্বের মিল ও জমার রেকর্ড সংরক্ষিত থাকবে, কিন্তু উনি আর অ্যাক্টিভ লিস্টে থাকবেন না এবং লগইন করতে পারবেন না।`,
-                                confirmText: 'মুছে ফেলুন',
-                                onConfirm: () => handleArchiveMember(mem),
-                              });
-                            }}
-                          >
-                            <span>🗑️</span>
-                            <span>সদস্য মুছুন</span>
-                          </button>
-                        )}
-
-                        {isManager && (
-                          <button
-                            className="btn g s"
-                            onClick={() => {
-                              setModalConfig({
-                                isOpen: true,
-                                title: 'সদস্য এডিট',
-                                fields: [
-                                  { k: 'n', l: 'নাম', v: mem.name },
-                                  { k: 'e', l: 'ইমেইল (Google Email)', v: mem.email || '' },
-                                  { k: 'r', l: 'রুম', v: mem.room || '' },
-                                  { k: 'j', l: 'জয়েনিং তারিখ', t: 'date', v: mem.join || TD },
-                                ],
-                                onConfirm: (vals) => {
-                                  if (!vals.n?.trim()) return false;
-                                  const updatedMembers = messState.members.map(m =>
-                                    m.id === mem.id
-                                      ? {
-                                          ...m,
-                                          name: vals.n.trim(),
-                                          email: vals.e?.trim().toLowerCase() || m.email,
-                                          room: vals.r?.trim(),
-                                          join: vals.j,
-                                        }
-                                      : m
-                                  );
-                                  const updatedEmails = Array.from(
-                                    new Set([
-                                      ...(messState.memberEmails || []),
-                                      vals.e?.trim().toLowerCase(),
-                                      ...updatedMembers.map(m => m.email?.toLowerCase()).filter(Boolean),
-                                    ].filter(Boolean) as string[])
-                                  );
-                                  saveStateToFirestore(
-                                    { ...messState, members: updatedMembers, memberEmails: updatedEmails },
-                                    'সদস্য তথ্য আপডেট হয়েছে'
-                                  );
-                                },
-                                onDelete: () => {
-                                  setModalConfig({
-                                    isOpen: true,
-                                    title: 'নিশ্চিত?',
-                                    message: `${mem.name}-কে মেস থেকে মুছে ফেলবেন?`,
-                                    confirmText: 'মুছে ফেলুন',
-                                    onConfirm: () => handleArchiveMember(mem),
-                                  });
-                                },
-                              });
-                            }}
-                          >
-                            এডিট করুন
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Month Calculation Breakdown */}
-                  <div className="card">
-                    <h3>
-                      <span>এই মাসের হিসাব ({banglaMonths[+activeMonthNum - 1]} {activeYear})</span>
-                      <span className={mSummary.bal >= 0 ? 'ok font-bold' : 'bad font-bold'}>
-                        {mSummary.bal >= 0 ? 'ফেরত ' : 'বাকি '}
-                        {tk(Math.abs(mSummary.bal))}
-                      </span>
-                    </h3>
-
-                    <div className="br"><span>Total Meal</span><b>{fm(mSummary.meals)}</b></div>
-                    <div className="br"><span>Total Deposit</span><b>{tk(mSummary.dep)}</b></div>
-                    <div className="br"><span>Meal Cost</span><b>{tk(mSummary.cost)}</b></div>
-                    <div className="br"><span>Individual Other Cost</span><b>{tk(mSummary.ind)}</b></div>
-                    <div className="br"><span>Shared Other Cost</span><b>{tk(mSummary.sh)}</b></div>
-                    <div className="br border-t border-[var(--line)] pt-2 mt-1">
-                      <span>Total Cost (Meal+Other)</span>
-                      <b className="bad">{tk(mSummary.tot)}</b>
-                    </div>
-                  </div>
-
-                  {/* Meals List */}
-                  <div className="card">
-                    <h3>মিলের তালিকা</h3>
-                    <div className="space-y-1.5 mt-2">
-                      {memberMealsDays.map(dateKey => {
-                        const s = messState.meals[dateKey][mem.id];
-                        return (
-                          <div key={dateKey} className="row">
-                            <div className="g1">
-                              <b>{dateKey}</b>
-                              <br />
-                              <small>B: {s.b || 0} · L: {s.l || 0} · D: {s.d || 0}</small>
-                            </div>
-                            <b>{mt(s)}</b>
-                          </div>
+                <MemberProfileView
+                  member={mem}
+                  messState={messState}
+                  activeYM={activeYM}
+                  monthSummary={monthSummary}
+                  isCurrentUserManager={isManager}
+                  onBack={() => {
+                    setTab('members');
+                    setDetailMemberId(null);
+                  }}
+                  onEdit={() => {
+                    setModalConfig({
+                      isOpen: true,
+                      title: 'সদস্য এডিট',
+                      fields: [
+                        { k: 'n', l: 'নাম', v: mem.name },
+                        { k: 'e', l: 'ইমেইল (Google Email)', v: mem.email || '' },
+                        { k: 'r', l: 'রুম', v: mem.room || '' },
+                        { k: 'j', l: 'জয়েনিং তারিখ', t: 'date', v: mem.join || TD },
+                      ],
+                      onConfirm: (vals) => {
+                        if (!vals.n?.trim()) return false;
+                        const updatedMembers = messState.members.map(m =>
+                          m.id === mem.id
+                            ? {
+                                ...m,
+                                name: vals.n.trim(),
+                                email: vals.e?.trim().toLowerCase() || m.email,
+                                room: vals.r?.trim(),
+                                join: vals.j,
+                              }
+                            : m
                         );
-                      })}
-                      {memberMealsDays.length === 0 && <small>কোনো মিল খাওয়া হয়নি</small>}
-                    </div>
-                  </div>
-
-                  {/* Deposits List */}
-                  <div className="card">
-                    <h3>জমার তালিকা</h3>
-                    <div className="space-y-1.5 mt-2">
-                      {memberDeposits.map(d => (
-                        <div key={d.id} className="row">
-                          <div className="g1">
-                            <b>{d.date}</b>
-                            <br />
-                            <small>{d.note || 'জমা'}</small>
-                          </div>
-                          <b className="ok">{tk(d.amt)}</b>
-                        </div>
-                      ))}
-                      {memberDeposits.length === 0 && <small>কোনো জমা নেই</small>}
-                    </div>
-                  </div>
-
-                  {/* Individual Costs List */}
-                  {memberIndCosts.length > 0 && (
-                    <div className="card">
-                      <h3>ব্যক্তিগত খরচ</h3>
-                      <div className="space-y-1.5 mt-2">
-                        {memberIndCosts.map(c => (
-                          <div key={c.id} className="row">
-                            <div className="g1">
-                              <b>{c.note}</b>
-                              <br />
-                              <small>{c.date}</small>
-                            </div>
-                            <b>{tk(c.amt)}</b>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    className="btn g"
-                    onClick={() => setTab('members')}
-                  >
-                    ‹ সব সদস্য
-                  </button>
-                </>
+                        const updatedEmails = Array.from(
+                          new Set([
+                            ...(messState.memberEmails || []),
+                            vals.e?.trim().toLowerCase(),
+                            ...updatedMembers.map(m => m.email?.toLowerCase()).filter(Boolean),
+                          ].filter(Boolean) as string[])
+                        );
+                        saveStateToFirestore(
+                          { ...messState, members: updatedMembers, memberEmails: updatedEmails },
+                          'সদস্য তথ্য আপডেট হয়েছে'
+                        );
+                      },
+                      onDelete: () => {
+                        setModalConfig({
+                          isOpen: true,
+                          title: 'নিশ্চিত?',
+                          message: `${mem.name}-কে মেস থেকে মুছে ফেলবেন?`,
+                          confirmText: 'মুছে ফেলুন',
+                          onConfirm: () => handleArchiveMember(mem),
+                        });
+                      },
+                    });
+                  }}
+                  onDelete={() => {
+                    setModalConfig({
+                      isOpen: true,
+                      title: 'সদস্য মুছে ফেলবেন?',
+                      message: `আপনি কি "${mem.name}"-কে মেস থেকে রিমুভ ও আর্কাইভ করতে চান? ওনার পূর্বের মিল ও জমার রেকর্ড সংরক্ষিত থাকবে, কিন্তু উনি আর অ্যাক্টিভ লিস্টে থাকবেন না এবং লগইন করতে পারবেন না।`,
+                      confirmText: 'মুছে ফেলুন',
+                      onConfirm: () => handleArchiveMember(mem),
+                    });
+                  }}
+                  onDownloadPDF={() => handleDownloadIndividualPDF(mem)}
+                />
               );
             })()}
           </div>
@@ -4532,26 +4261,26 @@ export default function App() {
         {/* --- VIEW: PROFILE --- */}
         {tab === 'profile' && (
           <div className="pg space-y-4">
-            <div className="card text-center py-6">
-              <span className="av !w-18 !h-18 !text-3xl mx-auto mb-3">
-                {user.photoURL ? (
-                  <img
-                    src={user.photoURL}
-                    alt="avatar"
-                    className="w-full h-full rounded-full object-cover"
-                  />
-                ) : (
-                  (whoName[0] || 'U').toUpperCase()
-                )}
-              </span>
-              <h3 className="justify-center text-xl">{user.displayName || whoName}</h3>
-              <p className="text-sm text-[var(--mut)]">{user.email}</p>
-              <div className="mt-2">
-                <span className="tag">
-                  {isManager ? 'ম্যানেজার' : 'মেম্বার'} · {messState.mess}
-                </span>
-              </div>
-            </div>
+            {(() => {
+              const myMem = currentMember || messState.members.find(m => (m.uid && m.uid === user.uid) || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())) || messState.members[0];
+              if (!myMem) return <p className="p-4">প্রোফাইল পাওয়া যায়নি</p>;
+
+              return (
+                <MemberProfileView
+                  member={myMem}
+                  messState={messState}
+                  activeYM={activeYM}
+                  monthSummary={monthSummary}
+                  isCurrentUserManager={isManager}
+                  onBack={() => setTab('home')}
+                  onEdit={() => {
+                    setIsChangePasswordOpen(true);
+                    setChangePassMsg(null);
+                  }}
+                  onDownloadPDF={() => handleDownloadIndividualPDF(myMem)}
+                />
+              );
+            })()}
 
             {/* Password Management Card */}
             <div className="card space-y-3">
@@ -5259,6 +4988,26 @@ export default function App() {
           setTab(targetTab as any);
           setDrawerOpen(false);
         }}
+      />
+
+      {/* Global Unauthorized Domain Modal */}
+      <UnauthorizedDomainModal
+        isOpen={unauthorizedDomainModal}
+        onClose={() => setUnauthorizedDomainModal(false)}
+        onSelectEmailAuth={() => {
+          setUnauthorizedDomainModal(false);
+          navigate('/login');
+        }}
+        onDemoLogin={() => {
+          setUnauthorizedDomainModal(false);
+          handleUserAuthenticated({
+            uid: 'demo_user_manager',
+            email: 'info.reduean@gmail.com',
+            displayName: 'Reduean Rahat (ম্যানেজার)',
+            photoURL: null,
+          });
+        }}
+        projectId="khaonkhata"
       />
 
       {/* Global Toast */}
