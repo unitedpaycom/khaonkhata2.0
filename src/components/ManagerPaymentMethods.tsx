@@ -16,6 +16,8 @@ interface ManagerPaymentMethodsProps {
   onApproveDeposit: (req: MemberDepositRequest) => Promise<void> | void;
   onRejectDeposit: (reqId: string) => Promise<void> | void;
   showToast: (msg: string) => void;
+  onBack?: () => void;
+  onOpenDrawer?: () => void;
 }
 
 export const PAYMENT_METHODS_META: Record<
@@ -179,6 +181,8 @@ export const ManagerPaymentMethods: React.FC<ManagerPaymentMethodsProps> = ({
   onApproveDeposit,
   onRejectDeposit,
   showToast,
+  onBack,
+  onOpenDrawer,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'methods' | 'requests'>('methods');
   const [editingMethod, setEditingMethod] = useState<PaymentMethodKey | null>(null);
@@ -342,15 +346,77 @@ export const ManagerPaymentMethods: React.FC<ManagerPaymentMethodsProps> = ({
     }
   };
 
+  const ORN = (
+    <svg className="kk-orn" viewBox="0 0 300 300" aria-hidden="true">
+      {Array.from({ length: 14 }).map((_, i) => (
+        <ellipse
+          key={i}
+          cx="150"
+          cy="150"
+          rx="140"
+          ry="48"
+          transform={`rotate(${i * 13} 150 150)`}
+        />
+      ))}
+      <circle cx="150" cy="150" r="146" />
+      <circle cx="150" cy="150" r="104" />
+    </svg>
+  );
+
   return (
-    <div className="pg space-y-4">
+    <div className="kk-view space-y-4">
+      {/* Top Hero Header */}
+      <header className="kk-hero">
+        {ORN}
+
+        <div className="kk-ht">
+          {onBack && (
+            <button
+              type="button"
+              className="kk-ib"
+              onClick={onBack}
+              aria-label="হোমে ফিরে যান"
+              title="হোম ড্যাশবোর্ড"
+            >
+              <svg className="kk-i"><use href="#kk-l" /></svg>
+            </button>
+          )}
+          <div className="kk-gr">
+            <h2>পেমেন্ট মেথড ও রিকোয়েস্ট</h2>
+            <span>ম্যানেজার ক্যাশলেস পেমেন্ট কন্ট্রোল</span>
+          </div>
+          {onOpenDrawer && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="kk-ib"
+                onClick={onOpenDrawer}
+                aria-label="মেনু"
+                title="মেনু খুলুন"
+              >
+                <svg className="kk-i"><use href="#kk-menu" /></svg>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="kk-bt">
+          <span className="text-xs text-[var(--gold)] font-medium flex items-center gap-1.5">
+            <span>💳</span> বিকাশ, নগদ, রকেট, উপায় ও বাংলা QR
+          </span>
+          <span className="text-xs text-[var(--mut)]">
+            অপেক্ষমান রিকোয়েস্ট: {pendingRequests.length}টি
+          </span>
+        </div>
+      </header>
+
       {/* Sub Tabs */}
-      <div className="card !p-1.5 flex gap-1">
+      <div className="kk-card !p-1.5 flex gap-1.5">
         <button
-          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
             activeSubTab === 'methods'
-              ? 'bg-[var(--pri)] text-white shadow-sm'
-              : 'text-[var(--mut)] hover:bg-[var(--line)]'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-[var(--mut)] hover:bg-[var(--line)]/50'
           }`}
           onClick={() => setActiveSubTab('methods')}
         >
@@ -359,17 +425,17 @@ export const ManagerPaymentMethods: React.FC<ManagerPaymentMethodsProps> = ({
         </button>
 
         <button
-          className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+          className={`flex-1 py-2.5 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
             activeSubTab === 'requests'
-              ? 'bg-[var(--pri)] text-white shadow-sm'
-              : 'text-[var(--mut)] hover:bg-[var(--line)]'
+              ? 'bg-emerald-600 text-white shadow-xs'
+              : 'text-[var(--mut)] hover:bg-[var(--line)]/50'
           }`}
           onClick={() => setActiveSubTab('requests')}
         >
           <Icon name="req" size={15} />
           <span>মেম্বারদের জমা রিকোয়েস্ট</span>
           {pendingRequests.length > 0 && (
-            <span className="w-5 h-5 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center">
+            <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-black">
               {pendingRequests.length}
             </span>
           )}
@@ -378,7 +444,7 @@ export const ManagerPaymentMethods: React.FC<ManagerPaymentMethodsProps> = ({
 
       {activeSubTab === 'methods' && (
         <div className="space-y-4">
-          <div className="card">
+          <div className="kk-card">
             <div className="flex items-center justify-between mb-2">
               <div>
                 <h3 className="text-base font-bold flex items-center gap-2">
@@ -721,7 +787,7 @@ export const ManagerPaymentMethods: React.FC<ManagerPaymentMethodsProps> = ({
 
       {/* Sub Tab 2: Member Deposit Requests Management */}
       {activeSubTab === 'requests' && (
-        <div className="card space-y-3">
+        <div className="kk-card space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-base font-bold flex items-center gap-1.5">

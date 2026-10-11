@@ -93,6 +93,12 @@ import { LogoLoader } from './components/LogoLoader';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { MemberProfileView } from './components/MemberProfileView';
 import { MembersListView } from './components/MembersListView';
+import { DepositView } from './components/DepositView';
+import { MealView } from './components/MealView';
+import { CostView } from './components/CostView';
+import { ActiveMonthView } from './components/ActiveMonthView';
+import { AllMonthsView } from './components/AllMonthsView';
+import { SettingsView } from './components/SettingsView';
 
 export interface AppUser {
   uid: string;
@@ -2545,32 +2551,7 @@ export default function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main id="app" className={tab === 'home' || tab === 'detail' || tab === 'members' ? 'home-active' : ''}>
-        {/* Top Header Bar for Sub-Pages: Clean layout with Menu button (☰) and Page Title only */}
-        {tab !== 'home' && tab !== 'detail' && tab !== 'profile' && tab !== 'members' && (
-          <div className="top flex items-center gap-3 mb-4">
-            <button
-              type="button"
-              className="pill md:hidden !p-2.5 flex items-center justify-center cursor-pointer"
-              onClick={() => setDrawerOpen(true)}
-              aria-label="Menu"
-            >
-              <Icon name="menu" size={20} />
-            </button>
-
-            <h1 className="capitalize text-lg md:text-xl font-bold m-0 flex-1">
-              {tab === 'about' && 'About Us'}
-              {tab === 'deposit' && 'Add Deposit'}
-              {tab === 'meal' && 'Add Meal'}
-              {tab === 'cost' && 'Add Cost'}
-              {tab === 'active' && 'Active Month Details'}
-              {tab === 'all' && 'All Month Details'}
-              {tab === 'settings' && 'Mess Settings'}
-              {tab === 'payment_methods' && 'Payment Methods'}
-              {tab === 'member_deposit' && 'Deposit'}
-            </h1>
-          </div>
-        )}
+      <main id="app" className="home-active">
 
             {/* Pending Offline Sync Notice Bar */}
             {pendingSyncCount > 0 && (
@@ -2965,866 +2946,91 @@ export default function App() {
 
         {/* --- VIEW: ADD MEAL --- */}
         {tab === 'meal' && (
-          <div className="pg space-y-4">
-            {/* Sub Tabs */}
-            <div className="stabs flex-wrap">
-              {isManager && (
-                <button
-                  className={mealSubTab === 'add' ? 'on' : ''}
-                  onClick={() => setMealSubTab('add')}
-                >
-                  মিল এন্ট্রি / এডিট
-                </button>
-              )}
-              <button
-                className={mealSubTab === 'req' ? 'on' : ''}
-                onClick={() => setMealSubTab('req')}
-              >
-                Meal Request {pendingReqCount > 0 ? `(${pendingReqCount})` : ''}
-              </button>
-              <button
-                className={mealSubTab === 'chart' ? 'on' : ''}
-                onClick={() => setMealSubTab('chart')}
-              >
-                Chart
-              </button>
-              {isManager && (
-                <button
-                  className={mealSubTab === 'history' ? 'on' : ''}
-                  onClick={() => setMealSubTab('history')}
-                >
-                  📅 মিল হিস্ট্রি ও মুছুন
-                </button>
-              )}
-            </div>
-
-            {/* TAB: ADD / EDIT MEAL (Manager) */}
-            {mealSubTab === 'add' && (
-              <>
-                <label>মেম্বার সিলেক্ট করুন</label>
-                <select
-                  value={mealWho}
-                  onChange={e => setMealWho(e.target.value)}
-                >
-                  <option value="all">For All Members</option>
-                  {messState.members.map(m => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-
-                <div className="flex justify-between items-center mt-2">
-                  <label className="m-0">মিলের তারিখ সিলেক্ট করুন</label>
-                  {messState.meals?.[mealDate] && (
-                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                      ✓ এই তারিখে মিল সংরক্ষিত আছে
-                    </span>
-                  )}
-                </div>
-                <input
-                  type="date"
-                  value={mealDate}
-                  onChange={e => setMealDate(e.target.value)}
-                />
-
-                {/* Date meal status banner & delete button */}
-                {(() => {
-                  const existingDay = messState.meals?.[mealDate];
-                  const existingTotal = existingDay
-                    ? Object.values(existingDay).reduce((acc, s) => acc + mt(s), 0)
-                    : 0;
-                  if (existingTotal > 0) {
-                    return (
-                      <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mt-2">
-                        <div>
-                          <b className="text-amber-900 dark:text-amber-100 text-xs">
-                            📅 {mealDate} তারিখে মিল রেকর্ড রয়েছে (মোট {existingTotal}টি মিল)
-                          </b>
-                          <p className="text-[11px] text-amber-700 dark:text-amber-300 m-0">
-                            নিচে সংখ্যা পরিবর্তন করে 'Save Realtime Meals' দিন অথবা পুরো দিনটি মুছে ফেলুন।
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          className="btn d s text-xs !py-1 !px-2.5 whitespace-nowrap cursor-pointer"
-                          onClick={() => {
-                            setModalConfig({
-                              isOpen: true,
-                              title: 'মিলের তারিখ মুছে ফেলা',
-                              message: `আপনি কি নিশ্চিতভাবে ${mealDate} তারিখের সকল মেম্বারের মিল রেকর্ড মুছে ফেলতে চান? এটি মোছার সাথে সাথে মোট মিল ও সদস্যদের ব্যালেন্স স্বয়ংক্রিয়ভাবে রিক্যালকুলেট হবে।`,
-                              confirmText: 'সম্পূর্ণ মুছুন',
-                              onConfirm: () => handleDeleteDateMeals(mealDate),
-                            });
-                          }}
-                        >
-                          🗑️ এই দিনের সব মিল মুছুন
-                        </button>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
-
-                {isMonthLocked && (
-                  <p className="bad text-sm font-semibold mt-2">
-                    এই মাস বন্ধ, মিল বদলানো যাবে না।
-                  </p>
-                )}
-
-                <p className="text-[var(--mut)] text-sm my-3">
-                  মেম্বারদের ব্রেকফাস্ট, লাঞ্চ ও ডিনার মিল সংখ্যা সেট করুন:
-                </p>
-
-                <div className="space-y-3">
-                  {messState.members
-                    .filter(m => mealWho === 'all' || m.id === mealWho)
-                    .map(m => {
-                      const slot = mealDraft[m.id] || { b: 0, l: 0, d: 0 };
-                      const totalSlot = mt(slot);
-                      const hasExistingInDb = messState.meals?.[mealDate]?.[m.id] && mt(messState.meals[mealDate][m.id]) > 0;
-                      return (
-                        <div key={m.id} className="card mc">
-                          <h3>
-                            <span className="flex items-center gap-2">
-                              <span className="av">{(m.name[0] || '?').toUpperCase()}</span>
-                              <span>{m.name}</span>
-                              {slot.rq ? <span className="rq">Request</span> : null}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span>Total: {totalSlot}</span>
-                              {totalSlot > 0 && (
-                                <button
-                                  type="button"
-                                  className="text-[11px] text-red-600 dark:text-red-400 hover:underline cursor-pointer bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded border border-red-200 dark:border-red-900"
-                                  onClick={() => {
-                                    setMealDraft(prev => ({
-                                      ...prev,
-                                      [m.id]: { b: 0, l: 0, d: 0 },
-                                    }));
-                                  }}
-                                  title="এই মেম্বারের মিল শূন্য করুন"
-                                >
-                                  রিসেট (0)
-                                </button>
-                              )}
-                              {hasExistingInDb && (
-                                <button
-                                  type="button"
-                                  className="text-[11px] text-red-700 dark:text-red-300 hover:underline cursor-pointer bg-red-100 dark:bg-red-900/40 px-2 py-0.5 rounded"
-                                  onClick={() => {
-                                    setModalConfig({
-                                      isOpen: true,
-                                      title: 'মেম্বারের মিল মুছুন',
-                                      message: `${m.name}-এর ${mealDate} তারিখের মিল ডাটাবেজ থেকে মুছে ফেলতে চান?`,
-                                      confirmText: 'মুছুন',
-                                      onConfirm: () => handleRemoveMemberMeal(m.id, mealDate),
-                                    });
-                                  }}
-                                  title="ডাটাবেজ থেকে সরাসরি এন্ট্রি মুছুন"
-                                >
-                                  🗑️ রিমুভ
-                                </button>
-                              )}
-                            </div>
-                          </h3>
-
-                          <div className="mr">
-                            {/* Breakfast Stepper */}
-                            <div>
-                              <small>Breakfast</small>
-                              <div className="st">
-                                <button
-                                  className="sb"
-                                  onClick={() => {
-                                    setMealDraft(prev => ({
-                                      ...prev,
-                                      [m.id]: {
-                                        ...slot,
-                                        b: Math.max(0, fm((slot.b || 0) - 0.5)),
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  −
-                                </button>
-                                <span>{slot.b || 0}</span>
-                                <button
-                                  className="sb"
-                                  onClick={() => {
-                                    setMealDraft(prev => ({
-                                      ...prev,
-                                      [m.id]: {
-                                        ...slot,
-                                        b: Math.min(5, fm((slot.b || 0) + 0.5)),
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Lunch Stepper */}
-                            <div>
-                              <small>Lunch</small>
-                              <div className="st">
-                                <button
-                                  className="sb"
-                                  onClick={() => {
-                                    setMealDraft(prev => ({
-                                      ...prev,
-                                      [m.id]: {
-                                        ...slot,
-                                        l: Math.max(0, fm((slot.l || 0) - 0.5)),
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  −
-                                </button>
-                                <span>{slot.l || 0}</span>
-                                <button
-                                  className="sb"
-                                  onClick={() => {
-                                    setMealDraft(prev => ({
-                                      ...prev,
-                                      [m.id]: {
-                                        ...slot,
-                                        l: Math.min(5, fm((slot.l || 0) + 0.5)),
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Dinner Stepper */}
-                            <div>
-                              <small>Dinner</small>
-                              <div className="st">
-                                <button
-                                  className="sb"
-                                  onClick={() => {
-                                    setMealDraft(prev => ({
-                                      ...prev,
-                                      [m.id]: {
-                                        ...slot,
-                                        d: Math.max(0, fm((slot.d || 0) - 0.5)),
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  −
-                                </button>
-                                <span>{slot.d || 0}</span>
-                                <button
-                                  className="sb"
-                                  onClick={() => {
-                                    setMealDraft(prev => ({
-                                      ...prev,
-                                      [m.id]: {
-                                        ...slot,
-                                        d: Math.min(5, fm((slot.d || 0) + 0.5)),
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  +
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-2 mt-4">
-                  <button
-                    className="btn big flex-1"
-                    onClick={handleSaveMealDraft}
-                  >
-                    Save Realtime Meals
-                  </button>
-                  <button
-                    className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 flex items-center justify-center gap-1.5 cursor-pointer text-sm font-semibold"
-                    disabled={targetedPushLoading}
-                    onClick={handleSendTargetedPush}
-                    title="আজকের মিল স্ট্যাটাস অনুযায়ী সদস্যদের পুশ নোটিফিকেশন পাঠান"
-                  >
-                    {targetedPushLoading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        <span>পাঠানো হচ্ছে...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Icon name="bell" size={16} />
-                        <span>পুশ নোটিফিকেশন পাঠান</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* TAB: MEAL REQUEST */}
-            {mealSubTab === 'req' && (
-              <div className="card">
-                <h3>
-                  <span>{isManager ? 'সকল মিল রিকোয়েস্ট' : 'আমার রিকোয়েস্ট'}</span>
-                  {!isManager && (
-                    <button
-                      className="btn s"
-                      onClick={() => {
-                        const tm = ds(new Date(Date.now() + 864e5));
-                        const opts: [string | number, string][] = [
-                          [0, '0'],
-                          [0.5, '0.5'],
-                          [1, '1'],
-                          [1.5, '1.5'],
-                          [2, '2'],
-                        ];
-                        setModalConfig({
-                          isOpen: true,
-                          title: 'নতুন মিল রিকোয়েস্ট',
-                          fields: [
-                            { k: 'date', l: 'তারিখ', t: 'date', v: tm },
-                            { k: 'b', l: 'Breakfast', t: 'sel', v: 0, o: opts },
-                            { k: 'l', l: 'Lunch', t: 'sel', v: 1, o: opts },
-                            { k: 'd', l: 'Dinner', t: 'sel', v: 1, o: opts },
-                          ],
-                          onConfirm: (vals) => {
-                            handleSubmitMealRequest(
-                              +vals.b || 0,
-                              +vals.l || 0,
-                              +vals.d || 0,
-                              vals.date
-                            );
-                          },
-                        });
-                      }}
-                    >
-                      + নতুন রিকোয়েস্ট
-                    </button>
-                  )}
-                </h3>
-
-                {!isManager && (
-                  <p className="text-xs text-[var(--mut)] mb-3">
-                    কাটঅফ সময়: রাত {messState.cutoff}:00 এর পর পরের দিনের মিল রিকোয়েস্ট দেওয়া যাবে না।
-                  </p>
-                )}
-
-                <div className="space-y-2 mt-3">
-                  {(isManager
-                    ? messState.reqs
-                    : messState.reqs.filter(r => r.m === currentMember?.id)
-                  )
-                    .slice()
-                    .reverse()
-                    .map(r => {
-                      const reqMember = messState.members.find(m => m.id === r.m);
-                      return (
-                        <div key={r.id} className="row">
-                          <span className="av">{(reqMember?.name[0] || '?').toUpperCase()}</span>
-                          <div className="g1">
-                            <b>{reqMember?.name || 'সদস্য'}</b>
-                            <br />
-                            <small>
-                              {r.date} · B: {r.b} · L: {r.l} · D: {r.d} (মোট: {r.b + r.l + r.d})
-                            </small>
-                          </div>
-                          {isManager && r.status === 'pending' ? (
-                            <div className="flex gap-1.5">
-                              <button
-                                className="btn s"
-                                onClick={() => handleApproveReq(r.id)}
-                              >
-                                Approve
-                              </button>
-                              <button
-                                className="btn g s text-[var(--bad)]"
-                                onClick={() => handleRejectReq(r.id)}
-                              >
-                                Reject
-                              </button>
-                            </div>
-                          ) : (
-                            <span
-                              className={`tag capitalize ${
-                                r.status === 'approved'
-                                  ? 'text-emerald-600 border-emerald-300'
-                                  : r.status === 'rejected'
-                                  ? 'text-rose-600 border-rose-300'
-                                  : 'text-amber-600 border-amber-300'
-                              }`}
-                            >
-                              {r.status}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                  {messState.reqs.length === 0 && (
-                    <small>কোনো মিল রিকোয়েস্ট নেই</small>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* TAB: MEAL CHART TABLE */}
-            {mealSubTab === 'chart' && (
-              <div className="card">
-                <h3>
-                  <span>মিল চার্ট ({banglaMonths[+activeMonthNum - 1]} {activeYear})</span>
-                  {isMonthLocked && <span className="tag">বন্ধ</span>}
-                </h3>
-                {isManager && (
-                  <small className="block mb-3 text-[var(--mut)]">
-                    যেকোনো ঘরের সংখ্যার ওপর চাপ দিলে ওই দিনের মিল এডিট করা যাবে।
-                  </small>
-                )}
-
-                <div className="scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>সদস্য</th>
-                        {daysInMonth.map((d, i) => (
-                          <th key={d}>{i + 1}</th>
-                        ))}
-                        <th>মোট</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {messState.members.map(m => {
-                        const totalMemberMeals = monthSummary?.mm[m.id]?.meals || 0;
-                        return (
-                          <tr key={m.id}>
-                            <td>{m.name}</td>
-                            {daysInMonth.map(d => {
-                              const dayMeals = messState.meals[d] || {};
-                              const count = mt(dayMeals[m.id]);
-                              const isToday = d === TD;
-                              return (
-                                <td
-                                  key={d}
-                                  className={`c ${count > 0 ? 'h' : ''} ${isToday ? 't' : ''}`}
-                                  onClick={() => {
-                                    if (!isManager) return;
-                                    setMealDate(d);
-                                    setMealWho(m.id);
-                                    setMealSubTab('add');
-                                  }}
-                                  title={`${m.name} (${d})`}
-                                >
-                                  {count > 0 ? count : '·'}
-                                </td>
-                              );
-                            })}
-                            <td>
-                              <b>{fm(totalMemberMeals)}</b>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-
-            {/* TAB: MEAL HISTORY & DELETE (Manager) */}
-            {mealSubTab === 'history' && (
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h3 className="!mb-0.5">মাসের মিল হিস্ট্রি ও রেকর্ড মুছুন</h3>
-                    <p className="text-xs text-[var(--mut)] m-0">
-                      যেকোনো অতীত দিনের মিল এডিট করুন বা সম্পূর্ণ রেকর্ড মুছে ফেলুন
-                    </p>
-                  </div>
-                  <span className="tag font-bold">
-                    {Object.keys(messState.meals || {}).filter(k => k.startsWith(activeYM)).length} দিন রেকর্ড রয়েছে
-                  </span>
-                </div>
-
-                {(() => {
-                  const recordedDates = Object.keys(messState.meals || {})
-                    .filter(k => k.startsWith(activeYM))
-                    .sort()
-                    .reverse();
-
-                  if (recordedDates.length === 0) {
-                    return (
-                      <div className="p-8 text-center text-sm text-[var(--mut)] bg-[var(--bg)] border border-[var(--line)] rounded-xl">
-                        এই মাসে এখনো কোনো মিল এন্ট্রি নেই
-                      </div>
-                    );
-                  }
-
-                  return recordedDates.map(dateKey => {
-                    const daySlots = messState.meals[dateKey] || {};
-                    const totalDay = Object.values(daySlots).reduce((acc, s) => acc + mt(s), 0);
-                    const memberNames = Object.entries(daySlots)
-                      .filter(([_, s]) => mt(s) > 0)
-                      .map(([memId, s]) => {
-                        const member =
-                          messState.members.find(m => m.id === memId) ||
-                          (messState.archivedMembers || []).find(m => m.id === memId);
-                        return `${member?.name || 'মেম্বার'}: ${mt(s)}`;
-                      });
-
-                    return (
-                      <div
-                        key={dateKey}
-                        className="card !p-4 hover:border-[var(--pri)] flex flex-col sm:flex-row justify-between sm:items-center gap-3 transition-colors"
-                      >
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <b className="text-base text-[var(--ink)]">📅 {dateKey}</b>
-                            <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200">
-                              মোট {totalDay} টি মিল
-                            </span>
-                          </div>
-                          <p className="text-xs text-[var(--mut)] m-0 line-clamp-1">
-                            {memberNames.length > 0 ? memberNames.join(', ') : 'কোনো সদস্য মিল খায়নি'}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            className="btn s font-bold flex items-center gap-1 cursor-pointer"
-                            onClick={() => {
-                              setMealDate(dateKey);
-                              setMealSubTab('add');
-                              showToast(`${dateKey} তারিখটি এডিটের জন্য লোড হয়েছে`);
-                            }}
-                          >
-                            <span>✏️</span>
-                            <span>এডিট করুন</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="btn d s font-bold flex items-center gap-1 cursor-pointer"
-                            onClick={() => {
-                              setModalConfig({
-                                isOpen: true,
-                                title: 'মিল সম্পূর্ণ মুছে ফেলবেন?',
-                                message: `আপনি কি নিশ্চিতভাবে ${dateKey} তারিখের সকল মেম্বারের মিল মুছে ফেলতে চান? এটি মুছে ফেলার সাথে সাথে মেসের মোট মিল এবং সকল মেম্বারের ব্যালেন্স তৎক্ষণাৎ রিক্যালকুলেট হবে।`,
-                                confirmText: 'সম্পূর্ণ মুছুন',
-                                onConfirm: () => handleDeleteDateMeals(dateKey),
-                              });
-                            }}
-                          >
-                            <span>🗑️</span>
-                            <span>মুছুন</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            )}
-            <div className="kk-spc" />
-          </div>
+          <MealView
+            messState={messState}
+            activeYM={activeYM}
+            setActiveYM={setActiveYM}
+            monthSummary={monthSummary}
+            isManager={isManager}
+            currentMember={currentMember}
+            isMonthLocked={isMonthLocked}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onBack={() => setTab('home')}
+            mealSubTab={mealSubTab}
+            setMealSubTab={setMealSubTab}
+            mealWho={mealWho}
+            setMealWho={setMealWho}
+            mealDate={mealDate}
+            setMealDate={setMealDate}
+            mealDraft={mealDraft}
+            setMealDraft={setMealDraft}
+            handleSaveMealDraft={handleSaveMealDraft}
+            handleSendTargetedPush={handleSendTargetedPush}
+            targetedPushLoading={targetedPushLoading}
+            pendingReqCount={pendingReqCount}
+            handleDeleteDateMeals={handleDeleteDateMeals}
+            handleRemoveMemberMeal={handleRemoveMemberMeal}
+            handleSubmitMealRequest={handleSubmitMealRequest}
+            handleApproveReq={handleApproveReq}
+            handleRejectReq={handleRejectReq}
+            daysInMonth={daysInMonth}
+            setModalConfig={setModalConfig}
+            showToast={showToast}
+          />
         )}
 
         {/* --- VIEW: DEPOSIT --- */}
         {tab === 'deposit' && (
-          <div className="pg space-y-4">
-            <div className="info">
-              <i>i</i>
-              <span>কোনো সদস্য মেসে টাকা জমা দিলে এখান থেকে রিয়েলটাইমে এন্ট্রি করুন।</span>
-            </div>
-
-            <label>Deposit Date</label>
-            <input
-              type="date"
-              value={depDate}
-              onChange={e => setDepDate(e.target.value)}
-            />
-
-            <label>Amount (টাকা)</label>
-            <input
-              type="number"
-              placeholder="যেমন: 3000"
-              value={depAmt}
-              onChange={e => setDepAmt(e.target.value)}
-            />
-
-            <label>Select who has deposited</label>
-            <select
-              value={depMember}
-              onChange={e => setDepMember(e.target.value)}
-            >
-              <option value="">সদস্য নির্বাচন করুন</option>
-              {messState.members.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-
-            <label>Deposit Note (optional)</label>
-            <textarea
-              rows={2}
-              placeholder="যেমন: মিলের অগ্রিম, বাড়িভাড়া..."
-              value={depNote}
-              onChange={e => setDepNote(e.target.value)}
-            />
-
-            <button
-              className="btn big mt-4"
-              onClick={handleSaveDeposit}
-            >
-              Add Deposit
-            </button>
-
-            {/* Deposit History */}
-            <div className="card mt-6">
-              <h3>জমার ইতিহাস ({banglaMonths[+activeMonthNum - 1]} {activeYear})</h3>
-              <div className="space-y-2 mt-3">
-                {messState.deposits
-                  .filter(d => d.date.startsWith(activeYM))
-                  .sort((a, b) => b.date.localeCompare(a.date))
-                  .map(d => {
-                    const depMem = messState.members.find(m => m.id === d.m);
-                    return (
-                      <div key={d.id} className="row">
-                        <span className="av">{(depMem?.name[0] || '?').toUpperCase()}</span>
-                        <div className="g1">
-                          <b>{depMem?.name || 'সদস্য'}</b>
-                          <br />
-                          <small>{d.date} {d.note ? `· ${d.note}` : ''}</small>
-                        </div>
-                        <b className={d.amt < 0 ? 'bad' : 'ok'}>
-                          {d.amt < 0 ? '−' : '+'}{tk(Math.abs(d.amt))}
-                        </b>
-                        {isManager && (
-                          <button
-                            className="btn g s text-[var(--bad)] ml-2"
-                            onClick={() => {
-                              setModalConfig({
-                                isOpen: true,
-                                title: 'নিশ্চিত?',
-                                message: 'এই জমার এন্ট্রি মুছে ফেলা হবে।',
-                                onConfirm: () => {
-                                  const filtered = messState.deposits.filter(x => x.id !== d.id);
-                                  saveStateToFirestore({ ...messState, deposits: filtered }, 'জমা মোছা হয়েছে');
-                                },
-                              });
-                            }}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                {messState.deposits.filter(d => d.date.startsWith(activeYM)).length === 0 && (
-                  <small>এই মাসে কোনো জমা নেই</small>
-                )}
-              </div>
-            </div>
-            <div className="kk-spc" />
-          </div>
+          <DepositView
+            messState={messState}
+            activeYM={activeYM}
+            setActiveYM={setActiveYM}
+            monthSummary={monthSummary}
+            isManager={isManager}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onBack={() => setTab('home')}
+            depDate={depDate}
+            setDepDate={setDepDate}
+            depAmt={depAmt}
+            setDepAmt={setDepAmt}
+            depMember={depMember}
+            setDepMember={setDepMember}
+            depNote={depNote}
+            setDepNote={setDepNote}
+            onSaveDeposit={handleSaveDeposit}
+            setModalConfig={setModalConfig}
+            saveStateToFirestore={saveStateToFirestore}
+          />
         )}
 
         {/* --- VIEW: COST --- */}
         {tab === 'cost' && (
-          <div className="pg space-y-4">
-            <div className="stabs">
-              <button
-                className={costSubTab === 'meal' ? 'on' : ''}
-                onClick={() => setCostSubTab('meal')}
-              >
-                Meal Cost (বাজার)
-              </button>
-              <button
-                className={costSubTab === 'other' ? 'on' : ''}
-                onClick={() => setCostSubTab('other')}
-              >
-                Other Cost (অন্যান্য)
-              </button>
-            </div>
-
-            <div className="info">
-              <i>i</i>
-              <span>
-                {costSubTab === 'meal'
-                  ? 'দৈনিক বাজারের খরচ যুক্ত করুন, যার সাথে সরাসরি মিল রেট হিসাব করা হবে।'
-                  : 'বিদ্যুৎ, গ্যাস, বুয়া বা ব্যক্তিগত খরচ। Shared হলে সবার মধ্যে সমান ভাগ হবে।'}
-              </span>
-            </div>
-
-            <label>তারিখ</label>
-            <input
-              type="date"
-              value={costDate}
-              onChange={e => setCostDate(e.target.value)}
-            />
-
-            <label>{costSubTab === 'meal' ? 'বাজারের টাকার পরিমাণ' : 'অন্যান্য খরচের পরিমাণ'}</label>
-            <input
-              type="number"
-              placeholder="যেমন: 1200"
-              value={costAmt}
-              onChange={e => setCostAmt(e.target.value)}
-            />
-
-            <label>{costSubTab === 'meal' ? 'বাজারের ফর্দ (অপশনাল)' : 'খরচের বিবরণ'}</label>
-            <textarea
-              rows={2}
-              placeholder={costSubTab === 'meal' ? 'মাছ, মুরগি, সবজি, তেল...' : 'যেমন: গ্যাস সিলিন্ডার বিল'}
-              value={costItems}
-              onChange={e => setCostItems(e.target.value)}
-            />
-
-            {costSubTab === 'other' && (
-              <>
-                <label>খরচের ধরন</label>
-                <select
-                  value={costType}
-                  onChange={e => setCostType(e.target.value as 'shared' | 'ind')}
-                >
-                  <option value="shared">Shared (সবার মাঝে সমান ভাগ)</option>
-                  <option value="ind">Individual (নির্দিষ্ট একজনের)</option>
-                </select>
-              </>
-            )}
-
-            <label>
-              {costSubTab === 'meal'
-                ? 'বাজারকারী সদস্য'
-                : costType === 'ind'
-                ? 'নির্দিষ্ট সদস্য'
-                : 'পরিশোধকারী (ঐচ্ছিক)'}
-            </label>
-            <select
-              value={costMember}
-              onChange={e => setCostMember(e.target.value)}
-            >
-              <option value="">সদস্য নির্বাচন করুন</option>
-              {messState.members.map(m => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-
-            {costSubTab === 'meal' && (
-              <label className="flex items-center gap-2 mt-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={costAutoDep}
-                  onChange={e => setCostAutoDep(e.target.checked)}
-                  className="w-5 h-5 !shadow-none !border-[var(--line)] cursor-pointer"
-                />
-                <span className="text-sm">সমপরিমাণ টাকা বাজারকারীর নামে স্বয়ংক্রিয় জমা করুন?</span>
-              </label>
-            )}
-
-            <button
-              className="btn big mt-4"
-              onClick={handleSaveCost}
-            >
-              Add Cost
-            </button>
-
-            {/* Cost History */}
-            <div className="card mt-6">
-              <h3>খরচের তালিকা ({banglaMonths[+activeMonthNum - 1]} {activeYear})</h3>
-              <div className="space-y-2 mt-3">
-                {/* Bazar Items */}
-                {messState.bazar
-                  .filter(b => b.date.startsWith(activeYM))
-                  .map(b => {
-                    const shopper = messState.members.find(m => m.id === b.by);
-                    return (
-                      <div key={b.id} className="row">
-                        <div className="g1">
-                          <b>{b.items || 'বাজার'}</b>
-                          <br />
-                          <small>{b.date} · Meal · {shopper?.name || 'সদস্য'}</small>
-                        </div>
-                        <b>{tk(b.amt)}</b>
-                        {isManager && (
-                          <button
-                            className="btn g s text-[var(--bad)] ml-2"
-                            onClick={() => {
-                              setModalConfig({
-                                isOpen: true,
-                                title: 'নিশ্চিত?',
-                                message: 'এই বাজার খরচ মুছে ফেলা হবে।',
-                                onConfirm: () => {
-                                  const filtered = messState.bazar.filter(x => x.id !== b.id);
-                                  saveStateToFirestore({ ...messState, bazar: filtered }, 'বাজার মোছা হয়েছে');
-                                },
-                              });
-                            }}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                {/* Other Costs */}
-                {messState.other
-                  .filter(o => o.date.startsWith(activeYM))
-                  .map(o => {
-                    const costMem = messState.members.find(m => m.id === o.m);
-                    return (
-                      <div key={o.id} className="row">
-                        <div className="g1">
-                          <b>{o.note}</b>
-                          <br />
-                          <small>
-                            {o.date} · {o.type === 'ind' ? `Individual (${costMem?.name})` : 'Shared (সবার)'}
-                          </small>
-                        </div>
-                        <b>{tk(o.amt)}</b>
-                        {isManager && (
-                          <button
-                            className="btn g s text-[var(--bad)] ml-2"
-                            onClick={() => {
-                              setModalConfig({
-                                isOpen: true,
-                                title: 'নিশ্চিত?',
-                                message: 'এই খরচ মুছে ফেলা হবে।',
-                                onConfirm: () => {
-                                  const filtered = messState.other.filter(x => x.id !== o.id);
-                                  saveStateToFirestore({ ...messState, other: filtered }, 'খরচ মোছা হয়েছে');
-                                },
-                              });
-                            }}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                {messState.bazar.filter(b => b.date.startsWith(activeYM)).length === 0 &&
-                  messState.other.filter(o => o.date.startsWith(activeYM)).length === 0 && (
-                    <small>এই মাসে কোনো খরচ যুক্ত হয়নি</small>
-                  )}
-              </div>
-            </div>
-            <div className="kk-spc" />
-          </div>
+          <CostView
+            messState={messState}
+            activeYM={activeYM}
+            setActiveYM={setActiveYM}
+            monthSummary={monthSummary}
+            isManager={isManager}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onBack={() => setTab('home')}
+            costSubTab={costSubTab}
+            setCostSubTab={setCostSubTab}
+            costDate={costDate}
+            setCostDate={setCostDate}
+            costAmt={costAmt}
+            setCostAmt={setCostAmt}
+            costItems={costItems}
+            setCostItems={setCostItems}
+            costMember={costMember}
+            setCostMember={setCostMember}
+            costType={costType}
+            setCostType={setCostType}
+            costAutoDep={costAutoDep}
+            setCostAutoDep={setCostAutoDep}
+            onSaveCost={handleSaveCost}
+            setModalConfig={setModalConfig}
+            saveStateToFirestore={saveStateToFirestore}
+          />
         )}
 
         {/* --- VIEW: MEMBERS --- */}
@@ -3951,316 +3157,74 @@ export default function App() {
         )}
 
         {/* --- VIEW: ACTIVE MONTH SUMMARY & PRINT --- */}
-        {tab === 'active' && monthSummary && (
-          <div className="pg space-y-4">
-            <div className="card">
-              <h3>
-                <span>
-                  {banglaMonths[+activeMonthNum - 1]} {activeYear}
-                </span>
-                <span className="tag">{isMonthLocked ? 'Closed' : 'Running'}</span>
-              </h3>
-              <div className="br"><span>মোট জমা</span><b>{tk(monthSummary.dep)}</b></div>
-              <div className="br"><span>বাজার খরচ</span><b>{tk(monthSummary.baz)}</b></div>
-              <div className="br"><span>অন্যান্য খরচ</span><b>{tk(monthSummary.oth)}</b></div>
-              <div className="br"><span>মোট মিল</span><b>{fm(monthSummary.meals)}</b></div>
-              <div className="br"><span>মিল রেট</span><b>{fm(monthSummary.rate)}৳</b></div>
-            </div>
-
-            <div className="card scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>সদস্য</th>
-                    <th>মিল</th>
-                    <th>জমা</th>
-                    <th>খরচ</th>
-                    <th>ব্যালেন্স</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {messState.members.map(m => {
-                    const o = monthSummary.mm[m.id];
-                    return (
-                      <tr
-                        key={m.id}
-                        className="cursor-pointer"
-                        onClick={() => {
-                          setDetailMemberId(m.id);
-                          setTab('detail');
-                        }}
-                      >
-                        <td>{m.name}</td>
-                        <td>{fm(o.meals)}</td>
-                        <td>{tk(o.dep)}</td>
-                        <td>{tk(o.tot)}</td>
-                        <td className={o.bal >= 0 ? 'ok font-bold' : 'bad font-bold'}>
-                          {tk(o.bal)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Export and Print Options */}
-            <div className="card space-y-3">
-              <div>
-                <h3 className="!mb-1">অফিসিয়াল PDF রিপোর্ট ও প্রিন্ট</h3>
-                <p className="text-xs text-[var(--mut)]">
-                  সম্পূর্ণ মেসের ওভারভিউ টেবিল অথবা আপনার ব্যক্তিগত খরচের হিসাব সরাসরি ডিভাইসে PDF ডাউনলোড করুন
-                </p>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 flex items-center justify-center gap-2 font-bold cursor-pointer shadow-xs"
-                  disabled={isExportingPDF}
-                  onClick={handleDownloadGroupPDF}
-                  title="Download Group Mess Summary Report PDF"
-                >
-                  <span>📋</span>
-                  <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'Group Mess Summary Report (PDF)'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn big g flex items-center justify-center gap-2 font-bold cursor-pointer"
-                  disabled={isExportingPDF}
-                  onClick={() => handleDownloadIndividualPDF()}
-                  title="Download Individual Monthly Expense & Meal Summary PDF"
-                >
-                  <span>👤</span>
-                  <span>{isExportingPDF ? 'PDF তৈরি হচ্ছে...' : 'My Individual Summary (PDF)'}</span>
-                </button>
-              </div>
-              <button
-                type="button"
-                className="btn g s w-full flex items-center justify-center gap-1.5 cursor-pointer text-xs"
-                onClick={() => window.print()}
-              >
-                <span>🖨️</span>
-                <span>ব্রাউজার প্রিন্ট ভিউ (Print View)</span>
-              </button>
-            </div>
-          </div>
+        {tab === 'active' && (
+          <ActiveMonthView
+            messState={messState}
+            activeYM={activeYM}
+            setActiveYM={setActiveYM}
+            monthSummary={monthSummary}
+            isMonthLocked={isMonthLocked}
+            isExportingPDF={isExportingPDF}
+            handleDownloadGroupPDF={handleDownloadGroupPDF}
+            handleDownloadIndividualPDF={handleDownloadIndividualPDF}
+            setDetailMemberId={setDetailMemberId}
+            setTab={setTab}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onBack={() => setTab('home')}
+          />
         )}
 
         {/* --- VIEW: ALL MONTHS HISTORY --- */}
         {tab === 'all' && (
-          <div className="pg space-y-3">
-            {(() => {
-              const allMonthsSet = new Set<string>();
-              Object.keys(messState.meals || {}).forEach(k => allMonthsSet.add(k.slice(0, 7)));
-              messState.deposits.forEach(d => allMonthsSet.add(d.date.slice(0, 7)));
-              messState.bazar.forEach(b => allMonthsSet.add(b.date.slice(0, 7)));
-              messState.other.forEach(o => allMonthsSet.add(o.date.slice(0, 7)));
-              allMonthsSet.add(activeYM);
-
-              const monthsList = Array.from(allMonthsSet).sort().reverse();
-
-              return monthsList.map(ymStr => {
-                const s = calcMonth(messState, ymStr);
-                const [y, m] = ymStr.split('-');
-                return (
-                  <div
-                    key={ymStr}
-                    className="card cursor-pointer hover:border-[var(--pri)]"
-                    onClick={() => {
-                      setActiveYM(ymStr);
-                      setTab('active');
-                    }}
-                  >
-                    <h3>
-                      <span>{banglaMonths[+m - 1]} {y}</span>
-                      <span className="tag">
-                        {messState.closed[ymStr] ? 'Closed' : 'Running'}
-                      </span>
-                    </h3>
-                    <div className="br"><span>জমা</span><b>{tk(s.dep)}</b></div>
-                    <div className="br"><span>মোট খরচ</span><b>{tk(s.tot)}</b></div>
-                    <div className="br"><span>মিল রেট</span><b>{fm(s.rate)}৳</b></div>
-                  </div>
-                );
-              });
-            })()}
-          </div>
+          <AllMonthsView
+            messState={messState}
+            activeYM={activeYM}
+            setActiveYM={setActiveYM}
+            setTab={setTab}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onBack={() => setTab('home')}
+          />
         )}
 
         {/* --- VIEW: SETTINGS --- */}
         {tab === 'settings' && (
-          <div className="pg space-y-4">
-            <div className="card">
-              <h3>Mess Settings</h3>
-              {isManager ? (
-                <div className="space-y-3 mt-3">
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--line)]">
-                    <div>
-                      <b>মেসের নাম: {messState.mess}</b>
-                      <p className="text-xs text-[var(--mut)]">মেসের নাম পরিবর্তন করুন</p>
-                    </div>
-                    <button
-                      className="btn g s"
-                      onClick={() => {
-                        setModalConfig({
-                          isOpen: true,
-                          title: 'মেসের নাম পরিবর্তন',
-                          fields: [{ k: 'name', l: 'নতুন নাম', v: messState.mess }],
-                          onConfirm: (vals) => {
-                            if (!vals.name?.trim()) return false;
-                            saveStateToFirestore(
-                              { ...messState, mess: vals.name.trim() },
-                              'মেসের নাম পরিবর্তন হয়েছে'
-                            );
-                          },
-                        });
-                      }}
-                    >
-                      বদলান
-                    </button>
-                  </div>
-
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--line)]">
-                    <div>
-                      <b>রিকোয়েস্ট কাটঅফ সময়: {messState.cutoff}:00</b>
-                      <p className="text-xs text-[var(--mut)]">পরের দিনের মিল রিকোয়েস্টের শেষ সময়</p>
-                    </div>
-                    <button
-                      className="btn g s"
-                      onClick={() => {
-                        setModalConfig({
-                          isOpen: true,
-                          title: 'কাটঅফ সময় নির্ধারণ (ঘণ্টা)',
-                          fields: [{ k: 'cutoff', l: 'আগের রাত কয়টা (0-23)', t: 'number', v: messState.cutoff }],
-                          onConfirm: (vals) => {
-                            const hour = Math.min(23, Math.max(0, +vals.cutoff || 21));
-                            saveStateToFirestore(
-                              { ...messState, cutoff: hour },
-                              'কাটঅফ সময় আপডেট হয়েছে'
-                            );
-                          },
-                        });
-                      }}
-                    >
-                      বদলান
-                    </button>
-                  </div>
-
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--line)]">
-                    <div>
-                      <b>মাস আর্কাইভ / বন্ধকরণ</b>
-                      <p className="text-xs text-[var(--mut)]">
-                        বর্তমান অবস্থা: {isMonthLocked ? 'এই মাস বন্ধ (Locked)' : 'এই মাস চলমান (Running)'}
-                      </p>
-                    </div>
-                    <button
-                      className="btn g s"
-                      onClick={() => {
-                        const updatedClosed = {
-                          ...messState.closed,
-                          [activeYM]: !isMonthLocked,
-                        };
-                        saveStateToFirestore(
-                          { ...messState, closed: updatedClosed },
-                          isMonthLocked ? 'মাস খোলা হয়েছে' : 'মাস বন্ধ করা হয়েছে'
-                        );
-                      }}
-                    >
-                      {isMonthLocked ? 'মাস খুলুন' : 'মাস বন্ধ করুন'}
-                    </button>
-                  </div>
-
-                  <div className="flex justify-between items-center py-2 border-b border-[var(--line)]">
-                    <div>
-                      <b>Change Manager</b>
-                      <p className="text-xs text-[var(--mut)]">ম্যানেজার হস্তান্তর করুন</p>
-                    </div>
-                    <button
-                      className="btn g s"
-                      onClick={() => {
-                        const opts: [string | number, string][] = messState.members.map(m => [
-                          m.id,
-                          `${m.name} (${m.email || 'Email নেই'})`,
-                        ]);
-                        setModalConfig({
-                          isOpen: true,
-                          title: 'নতুন ম্যানেজার নির্বাচন',
-                          fields: [{ k: 'mgr', l: 'মেম্বার সিলেক্ট করুন', t: 'sel', v: messState.mgr, o: opts }],
-                          onConfirm: (vals) => {
-                            const newMgrMem = messState.members.find(m => m.id === vals.mgr);
-                            if (!newMgrMem) return false;
-                            saveStateToFirestore(
-                              {
-                                ...messState,
-                                mgr: newMgrMem.id,
-                                mgrEmail: newMgrMem.email || messState.mgrEmail,
-                                mgrUid: newMgrMem.uid || messState.mgrUid,
-                              },
-                              'ম্যানেজার পরিবর্তন সম্পন্ন হয়েছে'
-                            );
-                          },
-                        });
-                      }}
-                    >
-                      হস্তান্তর
-                    </button>
-                  </div>
-
-                  <div className="flex justify-between items-center py-2 pt-4">
-                    <div>
-                      <b className="text-[var(--bad)]">মেস ডিলিট করুন</b>
-                      <p className="text-xs text-[var(--mut)]">মেসের সব ডাটা মুছে ফেলা হবে</p>
-                    </div>
-                    <button
-                      className="btn d s"
-                      onClick={() => {
-                        setModalConfig({
-                          isOpen: true,
-                          title: 'স্থায়ীভাবে মুছে ফেলতে চান?',
-                          message: 'এই মেস ও এর সকল মিল, জমা ও খরচের ডাটা মুছে যাবে।',
-                          onConfirm: async () => {
-                            try {
-                              const messRef = doc(db, 'messes', messState.id);
-                              await setDoc(messRef, { deleted: true, mess: '[Deleted]' }, { merge: true });
-                              setCurrentMessId('');
-                              localStorage.removeItem('mm_cur_mess_id');
-                              setMessState(null);
-                              showToast('মেস মুছে ফেলা হয়েছে');
-                            } catch (err) {
-                              handleFirestoreError(err, OperationType.DELETE, 'messes/' + messState.id);
-                            }
-                          },
-                        });
-                      }}
-                    >
-                      মুছুন
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <small>শুধু ম্যানেজার মেসের সেটিংস পরিবর্তন করতে পারবেন।</small>
-              )}
-            </div>
-
-            {/* Theme Toggle */}
-            <div className="card flex items-center justify-between">
-              <div>
-                <b>ডার্ক / লাইট মোড</b>
-                <p className="text-xs text-[var(--mut)]">থিম পরিবর্তন করুন</p>
-              </div>
-              <button
-                className="btn g s"
-                onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))}
-              >
-                {theme === 'light' ? 'Dark Mode' : 'Light Mode'}
-              </button>
-            </div>
-          </div>
+          <SettingsView
+            messState={messState}
+            isManager={isManager}
+            activeYM={activeYM}
+            isMonthLocked={isMonthLocked}
+            theme={theme}
+            setTheme={setTheme}
+            setModalConfig={setModalConfig}
+            saveStateToFirestore={saveStateToFirestore}
+            showToast={showToast}
+            onDeleteMess={() => {
+              setModalConfig({
+                isOpen: true,
+                title: 'স্থায়ীভাবে মুছে ফেলতে চান?',
+                message: 'এই মেস ও এর সকল মিল, জমা ও খরচের ডাটা মুছে যাবে।',
+                onConfirm: async () => {
+                  try {
+                    const messRef = doc(db, 'messes', messState.id);
+                    await setDoc(messRef, { deleted: true, mess: '[Deleted]' }, { merge: true });
+                    setCurrentMessId('');
+                    localStorage.removeItem('mm_cur_mess_id');
+                    setMessState(null);
+                    showToast('মেস মুছে ফেলা হয়েছে');
+                  } catch (err) {
+                    handleFirestoreError(err, OperationType.DELETE, 'messes/' + messState.id);
+                  }
+                },
+              });
+            }}
+            onOpenDrawer={() => setDrawerOpen(true)}
+            onBack={() => setTab('home')}
+          />
         )}
 
         {/* --- VIEW: PROFILE --- */}
         {tab === 'profile' && (
-          <div className="pg space-y-4">
+          <div className="kk-view space-y-4">
             {(() => {
               const myMem = currentMember || messState.members.find(m => (m.uid && m.uid === user.uid) || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())) || messState.members[0];
               if (!myMem) return <p className="p-4">প্রোফাইল পাওয়া যায়নি</p>;
@@ -4283,10 +3247,10 @@ export default function App() {
             })()}
 
             {/* Password Management Card */}
-            <div className="card space-y-3">
+            <div className="kk-card space-y-3">
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className="!mb-0.5 flex items-center gap-1.5">
+                  <h3 className="!mb-0.5 flex items-center gap-1.5 text-base font-bold text-[var(--ink)]">
                     <span>🔒</span>
                     <span>পাসওয়ার্ড পরিবর্তন (Change Password)</span>
                   </h3>
@@ -4296,7 +3260,7 @@ export default function App() {
                 </div>
                 <button
                   type="button"
-                  className="btn s font-bold cursor-pointer"
+                  className="kk-btn kk-sm font-bold cursor-pointer"
                   onClick={() => {
                     setIsChangePasswordOpen(prev => !prev);
                     setChangePassMsg(null);
@@ -4351,7 +3315,7 @@ export default function App() {
                       placeholder="বর্তমান পাসওয়ার্ড দিন"
                       value={changePassOld}
                       onChange={e => setChangePassOld(e.target.value)}
-                      className="w-full p-2.5 rounded-lg border border-[var(--line)] bg-[var(--card)] text-sm outline-none"
+                      className="kk-in"
                     />
                   </div>
                   <div>
@@ -4364,7 +3328,7 @@ export default function App() {
                       placeholder="কমপক্ষে ৬ অক্ষরের পাসওয়ার্ড"
                       value={changePassNew}
                       onChange={e => setChangePassNew(e.target.value)}
-                      className="w-full p-2.5 rounded-lg border border-[var(--line)] bg-[var(--card)] text-sm outline-none"
+                      className="kk-in"
                     />
                   </div>
                   <div>
@@ -4377,7 +3341,7 @@ export default function App() {
                       placeholder="নতুন পাসওয়ার্ড পুনরায় লিখুন"
                       value={changePassConfirm}
                       onChange={e => setChangePassConfirm(e.target.value)}
-                      className="w-full p-2.5 rounded-lg border border-[var(--line)] bg-[var(--card)] text-sm outline-none"
+                      className="kk-in"
                     />
                   </div>
 
@@ -4390,7 +3354,7 @@ export default function App() {
                   <div className="flex justify-end gap-2 pt-1">
                     <button
                       type="button"
-                      className="btn g s text-xs"
+                      className="px-3 py-1.5 rounded-lg border border-[var(--line)] text-xs font-semibold cursor-pointer"
                       onClick={() => setIsChangePasswordOpen(false)}
                       disabled={changePassLoading}
                     >
@@ -4398,7 +3362,7 @@ export default function App() {
                     </button>
                     <button
                       type="submit"
-                      className="btn s font-bold text-xs !bg-emerald-600 text-white hover:!bg-emerald-700 cursor-pointer"
+                      className="kk-btn kk-sm font-bold text-xs cursor-pointer"
                       disabled={changePassLoading}
                     >
                       {changePassLoading ? 'আপডেট হচ্ছে...' : 'পাসওয়ার্ড সেভ করুন'}
@@ -4409,21 +3373,20 @@ export default function App() {
             </div>
 
             {/* Mess List & Switcher */}
-            <div className="card">
-              <h3>আমার মেসসমূহ</h3>
+            <div className="kk-card space-y-3">
+              <h3 className="text-base font-bold text-[var(--ink)] m-0">আমার মেসসমূহ</h3>
               <div className="space-y-2 mt-2">
                 {userMesses.map(m => (
-                  <div key={m.id} className="row">
-                    <div className="g1">
-                      <b>{m.name}</b>
-                      <br />
-                      <small>Manager: {m.mgrEmail}</small>
+                  <div key={m.id} className="p-3 rounded-xl border border-[var(--line)] bg-[var(--line)]/20 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <b className="text-sm text-[var(--ink)] block truncate">{m.name}</b>
+                      <small className="text-xs text-[var(--mut)] block truncate">Manager: {m.mgrEmail}</small>
                     </div>
                     {m.id === currentMessId ? (
-                      <span className="tag text-emerald-600 font-semibold">Active</span>
+                      <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-bold shrink-0">Active</span>
                     ) : (
                       <button
-                        className="btn g s"
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shrink-0 cursor-pointer transition-all"
                         onClick={() => {
                           setCurrentMessId(m.id);
                           localStorage.setItem('mm_cur_mess_id', m.id);
@@ -4438,9 +3401,9 @@ export default function App() {
                 ))}
               </div>
 
-              <div className="acts !justify-start mt-4">
+              <div className="pt-2">
                 <button
-                  className="btn g s"
+                  className="w-full py-2.5 rounded-xl border border-dashed border-[var(--line)] hover:border-emerald-500/50 text-xs font-bold text-emerald-600 dark:text-emerald-400 cursor-pointer transition-all"
                   onClick={() => {
                     setCurrentMessId('');
                     localStorage.removeItem('mm_cur_mess_id');
@@ -4453,12 +3416,13 @@ export default function App() {
             </div>
 
             {/* Monthly Reports & Statements (PDF) */}
-            <div className="card space-y-3">
+            <div className="kk-card space-y-3">
               <div>
-                <h3 className="flex items-center gap-1.5 text-base !mb-1">
-                  <span>📄 মাসিক হিসাব ও PDF স্টেটমেন্ট</span>
+                <h3 className="flex items-center gap-1.5 text-base font-bold text-[var(--ink)] !mb-1">
+                  <span>📄</span>
+                  <span>মাসিক হিসাব ও PDF স্টেটমেন্ট</span>
                 </h3>
-                <p className="text-xs text-[var(--mut)]">
+                <p className="text-xs text-[var(--mut)] m-0">
                   বর্তমান মাসের ({banglaMonths[+activeMonthNum - 1]} {activeYear}) ব্যক্তিগত খরচ ও মিলের অফিশিয়াল PDF ডাউনলোড করুন
                 </p>
               </div>
@@ -4466,7 +3430,7 @@ export default function App() {
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
                 <button
                   type="button"
-                  className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 flex-1 flex items-center justify-center gap-2 text-sm font-semibold cursor-pointer shadow-xs"
+                  className="kk-btn flex-1 flex items-center justify-center gap-2 text-sm font-semibold cursor-pointer shadow-xs py-2.5"
                   disabled={isExportingPDF}
                   onClick={() => handleDownloadIndividualPDF()}
                   title="Download Individual Monthly Expense & Meal Summary PDF"
@@ -4478,7 +3442,7 @@ export default function App() {
                 {isManager && (
                   <button
                     type="button"
-                    className="btn big g flex-1 flex items-center justify-center gap-2 text-sm font-semibold cursor-pointer"
+                    className="kk-btn flex-1 flex items-center justify-center gap-2 text-sm font-semibold cursor-pointer py-2.5 !bg-[var(--line)] !text-[var(--ink)] hover:!bg-[var(--line)]/80"
                     disabled={isExportingPDF}
                     onClick={handleDownloadGroupPDF}
                     title="Download Group Mess Summary Report PDF"
@@ -4491,26 +3455,27 @@ export default function App() {
             </div>
 
             {/* FCM Notifications Card */}
-            <div className="card space-y-3">
+            <div className="kk-card space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="flex items-center gap-1.5 text-base">
-                    <span>🔔 পুশ নোটিফিকেশন (FCM)</span>
+                  <h3 className="flex items-center gap-1.5 text-base font-bold text-[var(--ink)] m-0">
+                    <span>🔔</span>
+                    <span>পুশ নোটিফিকেশন (FCM)</span>
                   </h3>
-                  <p className="text-xs text-[var(--mut)] mt-0.5">
+                  <p className="text-xs text-[var(--mut)] mt-0.5 m-0">
                     {profile?.fcmToken
                       ? 'ডিভাইস টোকেন নিবন্ধিত আছে'
                       : 'মিল ও মেসের রিয়েলটাইম অ্যালার্ট পেতে অনুমোদন করুন'}
                   </p>
                 </div>
-                <span className={`tag text-xs font-semibold ${profile?.fcmToken ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40' : 'text-amber-600'}`}>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${profile?.fcmToken ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/60' : 'text-amber-700 bg-amber-100 dark:bg-amber-950/60'}`}>
                   {profile?.fcmToken ? 'সক্রিয়' : 'নিষ্ক্রিয়'}
                 </span>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 pt-1">
                 <button
-                  className="btn g s flex-1 text-xs"
+                  className="flex-1 py-2 px-3 rounded-xl border border-[var(--line)] bg-[var(--card)] hover:bg-[var(--line)]/50 text-xs font-semibold cursor-pointer transition-all"
                   onClick={async () => {
                     if (!user) return;
                     showToast('নোটিফিকেশন পারমিশন ও টোকেন রিকোয়েস্ট করা হচ্ছে...');
@@ -4527,7 +3492,7 @@ export default function App() {
                 </button>
 
                 <button
-                  className="btn d s text-xs"
+                  className="py-2 px-3 rounded-xl border border-[var(--line)] bg-[var(--line)]/30 hover:bg-[var(--line)]/60 text-xs font-semibold cursor-pointer transition-all"
                   onClick={() => {
                     if (!messState) {
                       showToast('একটি মেসে যুক্ত থাকুন');
@@ -4554,23 +3519,23 @@ export default function App() {
                 <div className="pt-2 border-t border-[var(--line)]">
                   <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 font-semibold text-sm">
+                      <div className="flex items-center gap-1.5 font-semibold text-sm text-[var(--ink)]">
                         <span>📢</span>
-                        <span className="text-[var(--fg)]">টার্গেটেড মিল পুশ নোটিফিকেশন</span>
+                        <span>টার্গেটেড মিল পুশ নোটিফিকেশন</span>
                       </div>
-                      <span className="tag text-xs text-emerald-700 dark:text-emerald-300 font-semibold bg-emerald-500/15">
+                      <span className="text-[10px] text-emerald-700 dark:text-emerald-300 font-bold px-2 py-0.5 rounded-full bg-emerald-500/20">
                         ম্যানেজার অপশন
                       </span>
                     </div>
 
-                    <p className="text-xs text-[var(--mut)] leading-relaxed">
+                    <p className="text-xs text-[var(--mut)] leading-relaxed m-0">
                       আজকের মিল এন্ট্রি করার পর এই বাটনে চাপুন। স্বয়ংক্রিয়ভাবে সদস্যদের বর্তমান মিল রেকর্ড অনুযায়ী নির্দিষ্ট নোটিফিকেশন যাবে:
                       <br />• <b>মিল যুক্ত সদস্যদের:</b> &quot;আপনার আজকের মিল যুক্ত করা হয়েছে।&quot;
                       <br />• <b>মিল না থাকা সদস্যদের:</b> &quot;আপনার এখনো মিল দেওয়া হয় নি।&quot;
                     </p>
 
                     <button
-                      className="btn big !bg-emerald-600 !text-white hover:!bg-emerald-700 !w-full !py-2.5 flex items-center justify-center gap-2 text-xs font-semibold shadow-sm cursor-pointer"
+                      className="kk-btn w-full !py-2.5 flex items-center justify-center gap-2 text-xs font-semibold shadow-xs cursor-pointer"
                       disabled={targetedPushLoading}
                       onClick={handleSendTargetedPush}
                     >
@@ -4592,7 +3557,7 @@ export default function App() {
             </div>
 
             {/* Profile Action Buttons */}
-            <div className="card space-y-3">
+            <div className="kk-card space-y-3">
               <a
                 href="https://www.facebook.com/share/1VCSom58hc/"
                 target="_blank"
@@ -4604,13 +3569,13 @@ export default function App() {
               </a>
               <div className="flex items-center justify-between pt-1">
                 <button
-                  className="btn d"
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs cursor-pointer transition-all"
                   onClick={handleSignOut}
                 >
                   Log out
                 </button>
                 <button
-                  className="btn g s"
+                  className="px-4 py-2 rounded-xl border border-[var(--line)] bg-[var(--card)] hover:bg-[var(--line)]/50 text-xs font-semibold cursor-pointer transition-all"
                   onClick={() => setTheme(t => (t === 'light' ? 'dark' : 'light'))}
                 >
                   {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
@@ -4630,6 +3595,8 @@ export default function App() {
             onApproveDeposit={handleApproveDepositRequest}
             onRejectDeposit={handleRejectDepositRequest}
             showToast={showToast}
+            onBack={() => setTab('home')}
+            onOpenDrawer={() => setDrawerOpen(true)}
           />
         )}
 
@@ -4644,6 +3611,8 @@ export default function App() {
             )}
             onSubmitDeposit={handleSubmitMemberDeposit}
             showToast={showToast}
+            onBack={() => setTab('home')}
+            onOpenDrawer={() => setDrawerOpen(true)}
           />
         )}
       </main>
